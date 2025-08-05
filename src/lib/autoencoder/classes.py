@@ -8,7 +8,7 @@ from src.utils.classes import ConfigReader,MLP
 from src.utils.helper_functions import _forward_pass
 from src.lib.data_processing.classes import Data_Processing
 from pathlib import Path
-
+import time
 # jit functions need to sit outside of classes
 
 @jax.jit
@@ -157,10 +157,16 @@ class Encoder_Decoder():
         self.best_training_loss=float('inf')
         self.best_test_loss=float('inf')
 
+        t1=time.time()
         for i_step in range(self.training_iters):
 
-            
+                      
             opt_state=self._train_step(opt_state,i_step)
+            
+            if i_step%self.print_freq==0 and i_step>0:
+                t2=time.time()
+                print(f"Time taken for {self.print_freq} training steps: {t2-t1} seconds")
+                t1=time.time()
 
         print("Training complete")
         print(f"Best training loss: {self.best_training_loss}")
@@ -170,7 +176,7 @@ class Encoder_Decoder():
     def _train_step(self,opt_state,train_step):
 
         # sample trajectories from all
-        data_dict=self.data_processing_handler.sample_training_data(num_samples=self.training_constants['num_train_traj'])
+        data_dict=self.data_processing_handler.sample_training_data()
 
         # get value and grad
         value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_variables,data_dict)
