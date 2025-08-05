@@ -14,6 +14,9 @@ from src.lib.autoencoder.classes import Encoder_Decoder
 from diffrax import RESULTS
 import matplotlib.pyplot as plt
 from pathlib import Path
+import time
+import shutil
+
 
 jax.config.update("jax_enable_x64", True)
 
@@ -48,7 +51,6 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     initial_condition_data=data_dict['initial_condition_data']
     time_data=data_dict['time_data']
     
-
     # get ode solver specs
     pcoeff=constants['pcoeff']
     icoeff=constants['icoeff']
@@ -166,19 +168,32 @@ class Neural_ODE():
         self.data_processing_handler=data_processing_handler
         self.encoder_decoder_handler=encoder_decoder_handler
 
-        # get constants
+        # get training constants
         self.constants=self.data_processing_handler.get_training_constants()
 
-        # update self.constant with ode solver specs
-        self.constants['pcoeff']=float(self.config_handler.get_config_status("neural_ode.ode_solver.pcoeff"))
-        self.constants['icoeff']=float(self.config_handler.get_config_status("neural_ode.ode_solver.icoeff"))
-        self.constants['rtol']=float(self.config_handler.get_config_status("neural_ode.ode_solver.rtol"))
-        self.constants['atol']=float(self.config_handler.get_config_status("neural_ode.ode_solver.atol"))
-        self.constants['init_dt']=float(self.config_handler.get_config_status("neural_ode.ode_solver.init_dt"))
-        self.constants['dtmin']= None if self.config_handler.get_config_status("neural_ode.ode_solver.dtmin")is None else float(self.config_handler.get_config_status("neural_ode.ode_solver.dtmin"))
+        # get testing dict and constants
+        self.test_data_dict=self.data_processing_handler.get_test_data()
+        self.test_constants=self.data_processing_handler.get_testing_constants()
 
-        print(self.constants)
-        input("Press Enter to continue...")
+        # update neural ODE specs in dict
+        node_spec_dict={'pcoeff':float(self.config_handler.get_config_status("neural_ode.ode_solver.pcoeff")),
+                        'icoeff':float(self.config_handler.get_config_status("neural_ode.ode_solver.icoeff")),
+                        'rtol':float(self.config_handler.get_config_status("neural_ode.ode_solver.rtol")),
+                        'atol':float(self.config_handler.get_config_status("neural_ode.ode_solver.atol"))}
+        # update self.constant with ode solver specs
+
+        if self.config_handler.get_config_status("neural_ode.ode_solver.init_dt") == "None":    
+            node_spec_dict['init_dt']=None
+        else:
+            node_spec_dict['init_dt']=float(self.config_handler.get_config_status("neural_ode.ode_solver.init_dt"))
+        if self.config_handler.get_config_status("neural_ode.ode_solver.dtmin") == "None":    
+            node_spec_dict['dtmin']=None
+        else:
+            node_spec_dict['dtmin']=float(self.config_handler.get_config_status("neural_ode.ode_solver.dtmin"))
+
+        self.constants.update(node_spec_dict)
+        self.test_constants.update(node_spec_dict)
+        
         # get encoder and decoder weights
 
         #self.enc_dec_weights={'encoder':self.encoder_decoder_handler.encoder_object.weights,
@@ -207,6 +222,11 @@ class Neural_ODE():
         if self.config_handler.get_config_status("neural_ode.testing.test_model"):
             print("Getting predictions for test data")
             self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
+
+            # visualize results
+            if self.config_handler.get_config_status("neural_ode.testing.visualization.plot_results"):
+                print("Visualizing results")
+                self.visualize_results()
 
     def check_save_load_dirs(self):
         if not os.path.isdir(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))):
@@ -275,6 +295,7 @@ class Neural_ODE():
         # test node model before training
         #self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
 
+        t1=time.time()
         # run training
         for i_step in range(self.training_iters):
 
@@ -283,6 +304,10 @@ class Neural_ODE():
             if success==0:
                 print("Integration failed, stopping training.")
                 break
+            if i_step % self.print_freq == 0:
+                t2=time.time()
+                print(f"Training time for {self.print_freq} steps: {t2-t1} seconds")
+                t1=time.time()
 
     def _train_step(self,opt_state,train_step):
 
@@ -324,10 +349,8 @@ class Neural_ODE():
         
         if train_step % self.print_freq==0:
             #self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
-            test_data_dict=self.data_processing_handler.get_test_data()
-            test_constants=self.data_processing_handler.get_testing_constants()
-
-            test_loss=self.loss_fn(test_constants,self.trainable_variables_NODE,self.enc_dec_weights,test_data_dict,test_constants['num_test_traj'])
+            
+            test_loss=self.loss_fn(self.test_constants,self.trainable_variables_NODE,self.enc_dec_weights,self.test_data_dict,self.test_constants['num_test_traj'])
 
             self.training_loss_values.append(value)
             self.test_loss_values.append(test_loss)
@@ -362,53 +385,67 @@ class Neural_ODE():
 
         # load test data
 
-        test_data_dict=self.data_processing_handler.get_test_data()
-
-        # get test constants
-        test_constants=self.data_processing_handler.get_testing_constants()
-        num_timesteps_each_traj_test=test_constants['num_timesteps_each_traj_test']
+        
+        num_timesteps_each_traj_test=self.test_constants['num_timesteps_each_traj_test']
         # for every test trajectory, store prediction
 
-        num_test_traj=test_constants['num_test_traj']
-        max_test_traj_size=test_constants['max_test_traj_size']
-        num_inputs=test_constants['num_inputs']
+        num_test_traj=self.test_constants['num_test_traj']
+        max_test_traj_size=self.test_constants['max_test_traj_size']
+        num_inputs=self.test_constants['num_inputs']
         
-        mean_vals_inp=test_constants['mean_vals_inp'].reshape(1,1,-1)
-        std_vals_inp=test_constants['std_vals_inp'].reshape(1,1,-1)
-
         # store predicted ys
         pred_ys=np.zeros((num_test_traj,max_test_traj_size,num_inputs))
         pred_ts=np.zeros((num_test_traj,max_test_traj_size))
         
         # get ground truth labels
-        raw_testing_data=self.data_processing_handler.get_raw_testing_data()
+        raw_testing_data=self.data_processing_handler.get_raw_testing_data().copy()
         testing_predictions_list={'times_list_test':[],'specie_list_test':[],'temps_list_test':[]}
+        testing_true_list={'times_list_test':[],'specie_list_test':[],'temps_list_test':[]}
+
+        # get mean and std of inputs
+        # make shape (1,num_inputs) since each trajectory is computed separately
+        mean_vals_inp=self.test_constants['mean_vals_inp'].reshape(1,-1)
+        std_vals_inp=self.test_constants['std_vals_inp'].reshape(1,-1)
 
         for i_traj in range(num_test_traj):
             print(f"Predicting trajectory {i_traj+1} of {num_test_traj}")
-            solution=_integrate_NODE(test_constants,node_weights_dict,enc_dec_weights,test_data_dict,i_traj) 
+            solution=_integrate_NODE(self.test_constants,node_weights_dict,enc_dec_weights,self.test_data_dict,i_traj) 
 
             # check if integration failed
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:
                 print(f"Integration failed for trajectory {i_traj+1} of {num_test_traj}")
-                continue
+                
 
 
             latent_space_pred=jnp.squeeze(solution.ys)
             phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
 
             # unscale predicted ys
-            # std_vals and mean_vals are of shape (1,1,num_inputs)
+            # std_vals and mean_vals are of shape (1,num_inputs)
             #phys_space_pred_int=phys_space_pred_int*std_vals_inp+mean_vals_inp
 
-            pred_ys[i_traj,:,:]=phys_space_pred_int
+            pred_ys[i_traj,:,:]=phys_space_pred_int*std_vals_inp+mean_vals_inp
             pred_ts[i_traj,:]=solution.ts
+
+
+            #true soln
+            true_ys=self.test_data_dict['input_data'][i_traj,:,:]*std_vals_inp+mean_vals_inp
+
+            # append to testing lists
             testing_predictions_list['times_list_test'].append(pred_ts[i_traj,:num_timesteps_each_traj_test[i_traj]])
             testing_predictions_list['specie_list_test'].append(pred_ys[i_traj,:num_timesteps_each_traj_test[i_traj],:-1])
             testing_predictions_list['temps_list_test'].append(pred_ys[i_traj,:num_timesteps_each_traj_test[i_traj],num_inputs-1])
 
-        # save predictions and true values
+            # append to true lists
+            testing_true_list['times_list_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
+            testing_true_list['specie_list_test'].append(true_ys[:num_timesteps_each_traj_test[i_traj],:-1])
+            testing_true_list['temps_list_test'].append(true_ys[:num_timesteps_each_traj_test[i_traj],num_inputs-1])
 
+        # save predictions and true values
+        with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("predictions.pkl"),'wb') as f:
+            pickle.dump(testing_predictions_list,f,pickle.HIGHEST_PROTOCOL)
+        with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("true_list.pkl"),'wb') as f:
+            pickle.dump(testing_true_list,f,pickle.HIGHEST_PROTOCOL)
 
         
     # save neural ODE weights out
@@ -418,6 +455,7 @@ class Neural_ODE():
         with open(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path")),'wb') as f:
 
             pickle.dump(self.NODE_object,f,pickle.HIGHEST_PROTOCOL)
+
     def load_NODE_weights(self):
         
         with open(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path")),'rb') as f:
@@ -439,3 +477,53 @@ class Neural_ODE():
         with open(Path(self.config_handler.get_config_status("neural_ode.testing.predictions_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.testing.predictions_output_path")),'rb') as f:
 
             return pickle.load(f)
+
+    def visualize_results(self):
+
+        viz_dir=Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path(self.config_handler.get_config_status("neural_ode.testing.visualization.save_dir"))
+        if os.path.isdir(viz_dir):
+            print(f"Removing existing visualization directory: {viz_dir}")
+            shutil.rmtree(viz_dir)
+
+        os.mkdir(viz_dir)
+
+        with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("predictions.pkl"),'rb') as f:
+            prediction_lists=pickle.load(f)
+        with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("true_list.pkl"),'rb') as f:
+            true_lists=pickle.load(f)
+
+        # loop over saved trajectories and return comparison plots for each species and temperature
+        for i_traj in range(len(prediction_lists['specie_list_test'])):
+            i_traj_viz_dir=viz_dir/Path(f"traj_{i_traj}")
+            os.mkdir(i_traj_viz_dir)
+
+            num_inputs=self.test_constants['num_inputs']
+
+            for i_input in range(num_inputs-1):
+                plt.plot(prediction_lists['times_list_test'][i_traj],
+                         prediction_lists['specie_list_test'][i_traj][:,i_input],label='predicted')
+                plt.plot(true_lists['times_list_test'][i_traj],
+                         true_lists['specie_list_test'][i_traj][:,i_input],label='true')
+                plt.legend()
+                plt.grid()
+                plt.xlabel('Independent Variable')
+                plt.ylabel('Dependent Variable')
+                plt.title(f'Input No {i_input}')
+                if 'xscale' in self.config_handler.get_config_status("neural_ode.testing.visualization.settings").keys():
+                    plt.xscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['xscale'])
+                if 'yscale' in self.config_handler.get_config_status("neural_ode.testing.visualization.settings").keys():
+                    plt.yscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['yscale'])
+                plt.savefig(i_traj_viz_dir/Path(f"input_{i_input}.png"))
+                plt.close()
+            
+            plt.plot(prediction_lists['times_list_test'][i_traj],
+                     prediction_lists['temps_list_test'][i_traj],label='predicted')
+            plt.plot(true_lists['times_list_test'][i_traj],
+                     true_lists['temps_list_test'][i_traj],label='true')
+            
+            if 'xscale' in self.config_handler.get_config_status("neural_ode.testing.visualization.settings").keys():
+                plt.xscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['xscale'])
+            if 'yscale' in self.config_handler.get_config_status("neural_ode.testing.visualization.settings").keys():
+                plt.yscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['yscale'])
+            plt.savefig(i_traj_viz_dir/Path(f"input_{num_inputs-1}.png"))
+            plt.close()
