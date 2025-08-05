@@ -59,6 +59,7 @@ class Encoder_Decoder():
     def __init__(self,config_handler:ConfigReader,data_processing_handler:Data_Processing)->None:
 
         self.config_handler=config_handler # constants that do not change during training
+
         self.data_processing_handler=data_processing_handler
 
         self.training_loss_values=[]
@@ -66,6 +67,10 @@ class Encoder_Decoder():
         self.print_freq=self.config_handler.get_config_status("encoder_decoder.training.print_freq")
 
         self.training_constants=self.data_processing_handler.get_training_constants()
+
+        # check if save and load directories exist
+        self.check_save_load_dirs()
+
         # load model if specified
         if self.config_handler.get_config_status("encoder_decoder.loading.load_model"):
             print("Loading encoder and decoder weights")
@@ -89,6 +94,12 @@ class Encoder_Decoder():
             print("Testing loaded encoder and decoder weights")
             error=self.test_error_compute(self.encoder_object.weights,self.decoder_object.weights,save_results=True)
             print(f"Test error: {error}")
+
+    def check_save_load_dirs(self):
+        if not os.path.isdir(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))):
+            os.mkdir(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir")))
+        if not os.path.isdir(Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))):
+            os.mkdir(Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir")))
 
 
     def __init_optimizer__(self):
@@ -270,11 +281,11 @@ class Encoder_Decoder():
 
         save_mats=[self.encoder_object,self.decoder_object]
 
-        with open(self.config_handler.get_config_status("encoder_decoder.loading.load_path"),'wb') as f: 
+        with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'wb') as f: 
 
             pickle.dump(save_mats,f,pickle.HIGHEST_PROTOCOL)
     def _load_enc_dec(self):
 
         print("TODO : replace by standarized format loading")
-        with open(self.config_handler.get_config_status("encoder_decoder.loading.load_path"),'rb') as f:
+        with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'rb') as f:
             self.encoder_object,self.decoder_object=pickle.load(f)

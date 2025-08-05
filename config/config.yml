@@ -18,7 +18,8 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: True # True/False
+        load_model: False # True/False
+        model_output_dir: 'encoder_decoder_weights'
         load_path: 'encoder_decoder_weights.pkl' 
 
     architecture:
@@ -36,7 +37,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 20000
+        num_training_iters: 10000
         
         print_freq: 100
 
@@ -56,6 +57,7 @@ neural_ode:
     saving:
         save_model: True # True/False
         load_model: False # True/False
+        model_output_dir: 'NODE_weights'
         load_path: 'NODE_weights.pkl' 
 
     architecture:
@@ -80,12 +82,13 @@ neural_ode:
         simultaneous_training: False # True/False
 
     ode_solver:
-        max_steps: 1000000 # note: currently not used
+        
         pcoeff: 0.3
         icoeff: 0.4
         rtol: 1e-5
         atol: 1e-5
         dtmin: None
+        init_dt: 1E-12
 
     testing:
         test_model: True # True/False

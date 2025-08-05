@@ -6,6 +6,7 @@ import os
 import jax
 #jax.config.update('jax_default_device', jax.devices('cpu')[0])
 from pathlib import Path
+import mlflow
 
 if __name__=="__main__":
 
@@ -17,6 +18,14 @@ if __name__=="__main__":
     config_path=Path("config/config.yml")
 
     config_handler=ConfigReader(str(config_path))
+
+    # set up mlflow
+    mlflow.set_tracking_uri("./mlruns")
+    mlflow.set_experiment("AE_NODE")
+    mlflow.autolog()
+
+    #with mlflow.start_run():
+
 
     # set up data processing
     data_processing_handler=Data_Processing(config_handler)
