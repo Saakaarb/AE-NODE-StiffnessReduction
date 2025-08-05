@@ -60,7 +60,7 @@ neural_ode:
 
     architecture:
         network_type: 'mlp'
-        network_width: 16
+        network_width: 64
         num_layers: 2
 
     training:
@@ -76,7 +76,7 @@ neural_ode:
         num_training_iters: 5000
         batch_size: 128 # number of trajectories to use in a single pass
         
-        print_freq: 1
+        print_freq: 100
 
         simultaneous_training: False # True/False
 
