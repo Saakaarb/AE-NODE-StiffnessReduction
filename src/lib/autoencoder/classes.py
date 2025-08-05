@@ -9,6 +9,9 @@ from src.utils.helper_functions import _forward_pass
 from src.lib.data_processing.classes import Data_Processing
 from pathlib import Path
 import time
+import shutil
+import matplotlib.pyplot as plt
+
 # jit functions need to sit outside of classes
 
 @jax.jit
@@ -95,6 +98,10 @@ class Encoder_Decoder():
             error=self.test_error_compute(self.encoder_object.weights,self.decoder_object.weights,save_results=True)
             print(f"Test error: {error}")
 
+            if self.config_handler.get_config_status("encoder_decoder.testing.visualization.plot_results"):
+                print("Visualizing results")
+                self.visualize_results()
+
     def check_save_load_dirs(self):
         if not os.path.isdir(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))):
             os.mkdir(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir")))
@@ -180,7 +187,7 @@ class Encoder_Decoder():
                 t1=time.time()
 
         print("Training complete")
-        print(f"Best training loss: {self.best_training_loss}")
+        
         print(f"Best test loss: {self.best_test_loss}")
 
 
@@ -231,9 +238,9 @@ class Encoder_Decoder():
 
         self.test_data_dict=self.data_processing_handler.get_test_data()
         self.test_constants=self.data_processing_handler.get_testing_constants()
+
         enc_dec_res_dir=Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))
-        if not os.path.isdir(enc_dec_res_dir):
-            os.mkdir(enc_dec_res_dir)
+
 
 
         std_vals_inp=self.test_constants['std_vals_inp'].reshape(1,1,-1)
@@ -245,34 +252,42 @@ class Encoder_Decoder():
         
         input_preds=_forward_pass(latent_space_preds,dec_weights)
 
-        # un normalize
-        #input_data=input_data*std_vals_inp+mean_vals_inp
-        #input_preds=input_preds*std_vals_inp+mean_vals_inp
+        
 
         # compute error
         error=jnp.sqrt(jnp.mean(jnp.square(input_data-input_preds)))
 
-        # plot autoencoder performance
+        #Save and plot autoencoder performance
         #---------------------------------------------------------------
         if save_results:
-            print("Writing out results of autoencoder training to np array...")
+            # get some constants for predictions
+            prediction_lists={'specie_list_test':[],'temps_list_test':[],'time_data_test':[]}
+            true_lists={'specie_list_test':[],'temps_list_test':[],'time_data_test':[]}
+            
+            num_test_traj=self.test_constants['num_test_traj']
+            num_inputs=self.test_constants['num_inputs']
+            num_timesteps_each_traj_test=self.test_constants['num_timesteps_each_traj_test']
+        
+            # un normalize
+            input_data=input_data*std_vals_inp+mean_vals_inp
+            input_preds=input_preds*std_vals_inp+mean_vals_inp
 
-            with open(enc_dec_res_dir/Path('input_data.npy'),'wb') as f:
-                np.save(f,input_data)
+            print("Writing out results of autoencoder training to pickle file...")
 
-            with open(enc_dec_res_dir/Path('input_preds.npy'),'wb') as f:
-                np.save(f,input_preds)
+            # save predictions and true values
+            for i_traj in range(num_test_traj):
+                prediction_lists['specie_list_test'].append(input_preds[i_traj,:num_timesteps_each_traj_test[i_traj],:-1])
+                prediction_lists['temps_list_test'].append(input_preds[i_traj,:num_timesteps_each_traj_test[i_traj],num_inputs-1])
+                prediction_lists['time_data_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
+                
+                true_lists['specie_list_test'].append(input_data[i_traj,:num_timesteps_each_traj_test[i_traj],:-1])
+                true_lists['temps_list_test'].append(input_data[i_traj,:num_timesteps_each_traj_test[i_traj],num_inputs-1])
+                true_lists['time_data_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
 
-            # save time data
-            with open(enc_dec_res_dir/Path('time_data.npy'),'wb') as f:
-                np.save(f,self.test_data_dict['time_data'])
-
-            # save latent space predictions
-            with open(enc_dec_res_dir/Path('latent_space_preds.npy'),'wb') as f:
-                np.save(f,latent_space_preds)
-
-            if self.config_handler.get_config_status("encoder_decoder.testing.plot_results"):
-                print("Plotting results of autoencoder training not implemented yet")
+            with open(enc_dec_res_dir/Path('predictions.pkl'),'wb') as f:
+                pickle.dump(prediction_lists,f,pickle.HIGHEST_PROTOCOL)
+            with open(enc_dec_res_dir/Path('true_data.pkl'),'wb') as f:
+                pickle.dump(true_lists,f,pickle.HIGHEST_PROTOCOL)
 
         
         return error
@@ -289,3 +304,54 @@ class Encoder_Decoder():
         print("TODO : replace by standarized format loading")
         with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'rb') as f:
             self.encoder_object,self.decoder_object=pickle.load(f)
+
+    def visualize_results(self):
+
+        enc_dec_res_dir=Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))
+        with open(enc_dec_res_dir/Path('predictions.pkl'),'rb') as f:
+            prediction_lists=pickle.load(f)
+        with open(enc_dec_res_dir/Path('true_data.pkl'),'rb') as f:
+            true_lists=pickle.load(f)
+
+        viz_dir=Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.testing.visualization.save_dir"))
+        if os.path.isdir(viz_dir):
+            print(f"Removing existing visualization directory: {viz_dir}")
+            shutil.rmtree(viz_dir)
+
+        os.mkdir(viz_dir)
+
+        # loop over saved trajectories and return comparison plots for each species and temperature
+        for i_traj in range(len(prediction_lists['specie_list_test'])):
+            i_traj_viz_dir=viz_dir/Path(f"traj_{i_traj}")
+            os.mkdir(i_traj_viz_dir)
+            num_inputs=self.test_constants['num_inputs']
+
+            for i_input in range(num_inputs-1):
+                plt.plot(prediction_lists['time_data_test'][i_traj],
+                         prediction_lists['specie_list_test'][i_traj][:,i_input],label='predicted')
+                plt.plot(true_lists['time_data_test'][i_traj],
+                         true_lists['specie_list_test'][i_traj][:,i_input],label='true')
+                plt.legend()
+                plt.grid()
+                plt.xlabel('Independent Variable')
+                plt.ylabel('Dependent Variable')
+                plt.title(f'Input No {i_input}')
+                if 'xscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
+                    plt.xscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['xscale'])
+                if 'yscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
+                    plt.yscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['yscale'])
+                plt.savefig(i_traj_viz_dir/Path(f"input_{i_input}.png"))
+                plt.close()
+            
+            plt.plot(prediction_lists['time_data_test'][i_traj],
+                     prediction_lists['temps_list_test'][i_traj],label='predicted')
+            plt.plot(true_lists['time_data_test'][i_traj],
+                     true_lists['temps_list_test'][i_traj],label='true')
+            
+            if 'xscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
+                plt.xscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['xscale'])
+            if 'yscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
+                plt.yscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['yscale'])
+            plt.savefig(i_traj_viz_dir/Path(f"input_{num_inputs-1}.png"))
+            plt.close()
+        

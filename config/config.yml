@@ -18,7 +18,7 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: False # True/False
+        load_model: True # True/False
         model_output_dir: 'encoder_decoder_weights'
         load_path: 'encoder_decoder_weights.pkl' 
 
@@ -37,7 +37,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 10000
+        num_training_iters: 30000
         
         print_freq: 100
 
@@ -49,14 +49,18 @@ encoder_decoder:
         stiffness_reduction_weight: 1E-9 # weight for stiffness reduction loss
     
     testing:
-        test_model: True # True/False
-        plot_results: False # True/False
+        test_model: False # True/False
         save_dir: "enc_dec_results"
+        visualization:
+            plot_results: True # True/False
+            save_dir: "visualization"
+            settings:
+                xscale: 'log'
 
 neural_ode:
     saving:
         save_model: True # True/False
-        load_model: False # True/False
+        load_model: True # True/False
         model_output_dir: 'NODE_weights'
         load_path: 'NODE_weights.pkl' 
 
@@ -85,8 +89,8 @@ neural_ode:
         
         pcoeff: 0.3
         icoeff: 0.4
-        rtol: 1e-5
-        atol: 1e-5
+        rtol: 1e-1
+        atol: 1e-1
         dtmin: None
         init_dt: 1E-12
 
@@ -94,3 +98,8 @@ neural_ode:
         test_model: True # True/False
         plot_results: False # True/False
         save_dir: "NODE_results"
+        visualization:
+            plot_results: True # True/False
+            save_dir: "visualization"
+            settings:
+                xscale: 'log'
