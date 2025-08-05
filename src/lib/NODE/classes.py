@@ -12,6 +12,8 @@ from src.utils.classes import ConfigReader,MLP
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from diffrax import RESULTS
+import matplotlib.pyplot as plt
+
 
 jax.config.update("jax_enable_x64", True)
 
@@ -63,9 +65,9 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     #rtol=jnp.array([1E-2,1E-3])
 
 
-    solution = diffrax.diffeqsolve(term,diffrax.Dopri8(),t0=t_init,t1=t_final,dt0 = 1E-11,y0=y_latent_init,
+    solution = diffrax.diffeqsolve(term,diffrax.Dopri5(),t0=t_init,t1=t_final,dt0 = 1E-12,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
-                                    max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=0.3,icoeff=0.4,rtol=1e-2, atol=1e-2,dtmin=None))
+                                    max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=0.3,icoeff=0.4,rtol=1e-1, atol=1e-1,dtmin=None))
     
     #solution = diffrax.diffeqsolve(term,diffrax.Kvaerno5(),t0=t_init,t1=t_final,dt0 = 1e-11,y0=y_latent_init,
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
@@ -239,6 +241,10 @@ class Neural_ODE():
 
         opt_state=self.optimizer.init(self.trainable_variables_NODE)
         success=1
+
+        # test node model before training
+        #self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
+
         # run training
         for i_step in range(self.training_iters):
 
@@ -285,9 +291,9 @@ class Neural_ODE():
         if self.trainable_enc_dec:
             self.enc_dec_weights.update({'encoder':results['encoder'],'decoder':results['decoder']})
 
-        '''
+        
         if train_step % self.print_freq==0:
-
+            #self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
             test_data_dict=self.data_processing_handler.get_test_data()
             test_constants=self.data_processing_handler.get_testing_constants()
 
@@ -306,10 +312,10 @@ class Neural_ODE():
                 self.NODE_object.weights=self.trainable_variables_NODE['NODE']
                 #self.encoder_decoder_handler.encoder_object.weights=self.trainable_variables_NODE['encoder']
                 #self.encoder_decoder_handler.decoder_object.weights=self.trainable_variables_NODE['decoder']
-        '''
-        print(f"Step: {train_step}, training loss: {value}")
+        
+        #print(f"Step: {train_step}, training loss: {value}")
 
-        self.NODE_object.weights=self.trainable_variables_NODE['NODE']
+        #self.NODE_object.weights=self.trainable_variables_NODE['NODE']
         return opt_state,success
 
 
@@ -330,7 +336,7 @@ class Neural_ODE():
 
         # get test constants
         test_constants=self.data_processing_handler.get_testing_constants()
-
+        num_timesteps_each_traj_test=test_constants['num_timesteps_each_traj_test']
         # for every test trajectory, store prediction
 
         num_test_traj=test_constants['num_test_traj']
@@ -356,13 +362,35 @@ class Neural_ODE():
 
             # unscale predicted ys
             # std_vals and mean_vals are of shape (1,1,num_inputs)
-            phys_space_pred_int=phys_space_pred_int*std_vals_inp+mean_vals_inp
+            #phys_space_pred_int=phys_space_pred_int*std_vals_inp+mean_vals_inp
 
             pred_ys[i_traj,:,:]=phys_space_pred_int
             pred_ts[i_traj,:]=solution.ts
-        
-        # save predictions and true values
+        '''
+        # plot first trajectory
+        plt.plot(pred_ts[0,0:num_timesteps_each_traj_test[0]],pred_ys[0,0:num_timesteps_each_traj_test[0],0],label='predicted')
+        plt.plot(test_data_dict['time_data'][0,:],test_data_dict['input_data'][0,:,0],label='true')
+        plt.legend()
+        plt.xscale('log')
+        plt.savefig('pred_vs_true_0.png')
+        plt.close()
 
+        plt.plot(pred_ts[1,0:num_timesteps_each_traj_test[1]],pred_ys[1,0:num_timesteps_each_traj_test[1],0],label='predicted')
+        plt.plot(test_data_dict['time_data'][1,:],test_data_dict['input_data'][1,:,0],label='true')
+        plt.legend()
+        plt.xscale('log')
+        plt.savefig('pred_vs_true_1.png')
+        plt.close()
+
+        plt.plot(pred_ts[2,0:num_timesteps_each_traj_test[2]],pred_ys[2,0:num_timesteps_each_traj_test[2],0],label='predicted')
+        plt.plot(test_data_dict['time_data'][2,:],test_data_dict['input_data'][2,:,0],label='true')
+        plt.legend()
+        plt.xscale('log')
+        plt.savefig('pred_vs_true_2.png')
+        plt.close()
+        input("Press Enter to continue...")
+        # save predictions and true values
+        '''
     # save neural ODE weights out
     def save_NODE_weights(self):
 
