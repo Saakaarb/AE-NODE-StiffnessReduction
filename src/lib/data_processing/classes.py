@@ -1,14 +1,23 @@
 import numpy as np
 import os
 import h5py
-from src.utils.helper_functions import preprocess_data,standard_score_norm
+import random
+from src.utils.helper_functions import preprocess_data,standard_score_norm,divide_range_random
 from src.utils.classes import ConfigReader
 # This class loads and pre processes data to run the experiments
 
 class Data_Processing():
 
     def __init__(self, config_handler:ConfigReader)->None:
-
+        """
+        Initialize the Data_Processing class with configuration settings.
+        
+        Args:
+            config_handler (ConfigReader): Configuration reader object containing data processing parameters
+            
+        Returns:
+            None: Initializes the Data_Processing object
+        """
         self.config_handler=config_handler
 
         # list objects that are created during pre processing
@@ -64,8 +73,19 @@ class Data_Processing():
 
         self.preprocess_data()
 
-    # preprocess data
     def preprocess_data(self)->None:
+        """
+        Main data preprocessing pipeline.
+        
+        Either loads preprocessed data from disk or performs full preprocessing including 
+        training/testing data preparation, data assimilation, mask construction, and optional data saving.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
         
 
         # data preprocess
@@ -103,8 +123,22 @@ class Data_Processing():
                 self.save_data()
                 print("Data saved to disk")
         
+        # divide loaded data into batches
+        self.divide_data_into_batches()
 
     def prepare_training_data_lists(self)->None:
+        """
+        Process training data files.
+        
+        Loads raw data, applies preprocessing, computes normalization parameters from the first trajectory,
+        standardizes inputs, and stores processed data in lists.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
         
         for i_traj,data_file in enumerate(self.train_data_files_list):
             data=np.genfromtxt(data_file,delimiter=',')
@@ -156,6 +190,18 @@ class Data_Processing():
 
 
     def prepare_testing_data_lists(self)->None:
+        """
+        Process testing data files.
+        
+        Loads raw data, applies preprocessing, standardizes inputs using training normalization parameters,
+        and stores processed data in lists.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
         
     # testing data preparation
 
@@ -180,9 +226,18 @@ class Data_Processing():
 
         self.num_test_traj=len(self.test_data_files_list)
 
-    # assimilate data across trajectories into a single 3D array
-    # this enables the use of jax.vmap to speed up training
     def assimilate_training_data_arrays(self)->None:
+        """
+        Convert training data lists into 3D numpy arrays for efficient batch processing.
+        
+        Handles variable trajectory lengths by padding with end time values.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
         
         all_input_data=np.zeros([self.num_train_traj,self.max_train_traj_size,self.num_inputs])
         all_time_data=np.zeros([self.num_train_traj,self.max_train_traj_size])
@@ -207,6 +262,17 @@ class Data_Processing():
 
 
     def assimilate_testing_data_arrays(self)->None:
+        """
+        Convert testing data lists into 3D numpy arrays for efficient batch processing.
+        
+        Handles variable trajectory lengths by padding with end time values.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
 
         all_input_data=np.zeros([self.num_test_traj,self.max_test_traj_size,self.num_inputs])
         all_time_data=np.zeros([self.num_test_traj,self.max_test_traj_size])
@@ -229,7 +295,21 @@ class Data_Processing():
         self.initial_condition_data_test=initial_condition_data
         
 
+    
+
     def load_data_files(self):
+        """
+        Load raw data file paths and split into training/testing sets.
+        
+        Loads raw data file paths from the configured directory, splits them into training 
+        and testing sets based on the train split ratio, and stores the file lists.
+        
+        Args:
+            None: Uses config_handler
+            
+        Returns:
+            None: Modifies instance variables
+        """
         file_path=self.config_handler.get_config_status("data_processing.saving_loading.raw_data_path")
         data_files_list=[os.path.join(file_path, f) for f in os.listdir(file_path) if os.path.isfile(os.path.join(file_path, f))]
 
@@ -242,6 +322,18 @@ class Data_Processing():
 
 
     def construct_masks_training_data(self)->None:
+        """
+        Create binary masks for training data to handle variable trajectory lengths.
+        
+        Creates reconstruction masks, latent space masks, condition number regularization masks,
+        and broadcasted time data for JAX compatibility.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
         
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
 
@@ -277,6 +369,17 @@ class Data_Processing():
             self.all_time_data_broadcasted_train[:,:,i_latent]=self.all_time_data_train
 
     def construct_masks_testing_data(self)->None:
+        """
+        Create binary masks for testing data to handle variable trajectory lengths.
+        
+        Creates reconstruction masks and latent space masks for testing data.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Modifies instance variables
+        """
 
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
 
@@ -293,6 +396,17 @@ class Data_Processing():
 
 
     def get_raw_training_data(self)->dict[str,list]:
+        """
+        Get raw preprocessed training data in list format.
+        
+        Returns the raw preprocessed training data in list format before assimilation into arrays.
+        
+        Args:
+            None
+            
+        Returns:
+            dict[str, list]: Dictionary containing raw training data lists (times, species, temperatures, inputs)
+        """
         
         return {
             "times_list_train":self.times_list_train,
@@ -302,6 +416,17 @@ class Data_Processing():
         }
 
     def get_raw_testing_data(self)->dict[str,list]:
+        """
+        Get raw preprocessed testing data in list format.
+        
+        Returns the raw preprocessed testing data in list format before assimilation into arrays.
+        
+        Args:
+            None
+            
+        Returns:
+            dict[str, list]: Dictionary containing raw testing data lists (times, species, temperatures, inputs)
+        """
 
         return {
             "times_list_test":self.times_list_test,
@@ -311,6 +436,18 @@ class Data_Processing():
         }
 
     def get_training_constants(self)->dict:
+        """
+        Get training data constants and metadata.
+        
+        Returns training data constants including trajectory counts, dimensions, 
+        normalization parameters, and configuration values.
+        
+        Args:
+            None
+            
+        Returns:
+            dict: Dictionary containing training data constants and metadata
+        """
 
         constants_dict={
             "num_train_traj":self.num_train_traj,
@@ -328,6 +465,18 @@ class Data_Processing():
         return constants_dict
 
     def get_testing_constants(self)->dict:
+        """
+        Get testing data constants and metadata.
+        
+        Returns testing data constants including trajectory counts, dimensions, 
+        normalization parameters, and configuration values.
+        
+        Args:
+            None
+            
+        Returns:
+            dict: Dictionary containing testing data constants and metadata
+        """
         constants_dict={
             "num_test_traj":self.num_test_traj,
             "max_test_traj_size":self.max_test_traj_size,
@@ -343,42 +492,72 @@ class Data_Processing():
         }
         return constants_dict
 
-    # sample training data according to batch size
-    def sample_training_data(self,num_samples:int)->dict[str,np.ndarray]:
+    def divide_data_into_batches(self,)->None:
+        """
+        Randomly sample a subset of training trajectories.
+        
+        Randomly samples a subset of training trajectories and returns the corresponding 
+        data arrays and masks for batch training.
+        
+        Args:
+            num_samples (int): Number of trajectories to sample
+            
+        Returns:
+            None: Modifies instance variables
+        """
 
-        num_samples=min(num_samples,self.num_train_traj)
+        self.data_samples_train=[]
+        
 
-        # sample indices
-        sample_indices=np.random.choice(self.num_train_traj,size=num_samples,replace=False)
+        num_samples_per_batch=min(self.config_handler.get_config_status("data_processing.num_samples_per_batch"),self.num_train_traj)
 
-        # get all relevant training data subsets and masks
-        input_data_subset=self.all_input_data_train[sample_indices]
-        time_data_subset=self.all_time_data_train[sample_indices]
-        start_end_time_data_subset=self.start_end_time_data_train[sample_indices]
-        initial_condition_data_subset=self.initial_condition_data_train[sample_indices]
-        recon_mask_subset=self.recon_mask_train[sample_indices]
 
-        latent_space_mask_subset=self.latent_space_mask_train[sample_indices]
-        cond_1_mask_subset=self.cond_1_mask_train[sample_indices]
-        cond_2_mask_subset=self.cond_2_mask_train[sample_indices]
-        all_time_data_broadcasted_subset=self.all_time_data_broadcasted_train[sample_indices]
+        #generate num_samples_per_batch sample index groups and sample data, without replacament
+        sample_indices_groups=divide_range_random(0,self.num_train_traj,num_samples_per_batch)
+         
+        for sample_indices in sample_indices_groups:
 
-        subset_dict={
-            "input_data":input_data_subset,
-            "time_data":time_data_subset,
-            "start_end_time_data":start_end_time_data_subset,
-            "initial_condition_data":initial_condition_data_subset,
-            "recon_mask":recon_mask_subset,
-            "latent_space_mask":latent_space_mask_subset,
-            "cond_1_mask":cond_1_mask_subset,
-            "cond_2_mask":cond_2_mask_subset,
-            "all_time_data_broadcasted":all_time_data_broadcasted_subset
-        }
-        return subset_dict
+            # get all relevant training data subsets and masks
+            input_data_subset=self.all_input_data_train[sample_indices]
+            time_data_subset=self.all_time_data_train[sample_indices]
+            start_end_time_data_subset=self.start_end_time_data_train[sample_indices]
+            initial_condition_data_subset=self.initial_condition_data_train[sample_indices]
+            recon_mask_subset=self.recon_mask_train[sample_indices]
 
-    # return the test set data in the same format as the training data
-    # 
+            latent_space_mask_subset=self.latent_space_mask_train[sample_indices]
+            cond_1_mask_subset=self.cond_1_mask_train[sample_indices]
+            cond_2_mask_subset=self.cond_2_mask_train[sample_indices]
+            all_time_data_broadcasted_subset=self.all_time_data_broadcasted_train[sample_indices]
+
+            # TODO add jax.device_put() to move to GPU
+            subset_dict={
+                "input_data":input_data_subset,
+                "time_data":time_data_subset,
+                "start_end_time_data":start_end_time_data_subset,
+                "initial_condition_data":initial_condition_data_subset,
+                "recon_mask":recon_mask_subset,
+                "latent_space_mask":latent_space_mask_subset,
+                "cond_1_mask":cond_1_mask_subset,
+                "cond_2_mask":cond_2_mask_subset,
+                "all_time_data_broadcasted":all_time_data_broadcasted_subset
+            }
+
+            self.data_samples_train.append(subset_dict)
+        
+        
+
     def get_test_data(self)->dict[str,np.ndarray]:
+        """
+        Get all testing data in the same format as training data.
+        
+        Returns all testing data in the same format as training data for evaluation purposes.
+        
+        Args:
+            None
+            
+        Returns:
+            dict[str, np.ndarray]: Dictionary containing all testing data arrays and masks
+        """
 
         test_data_dict={
             "input_data":self.all_input_data_test,
@@ -392,7 +571,18 @@ class Data_Processing():
         return test_data_dict
 
     def save_data(self):
-        """Save all training and testing data to HDF5 files for DVC version control"""
+        """
+        Save all training and testing data to HDF5 files for DVC version control.
+        
+        Saves all processed training and testing data, masks, and metadata to HDF5 files 
+        with compression for efficient storage and DVC version control.
+        
+        Args:
+            None: Uses instance variables
+            
+        Returns:
+            None: Saves files to disk
+        """
         
         # Create data directory if it doesn't exist
         data_dir = self.config_handler.get_config_status("data_processing.saving_loading.processed_data_path")
@@ -469,8 +659,28 @@ class Data_Processing():
 
         print(f"Data saved to {data_dir}/")
 
+    def sample_training_data(self,)->dict[str,np.ndarray]:
+        """
+        Divide data into batches.
+        
+        Args:
+            
+        """
+        return random.choice(self.data_samples_train)
+
     def load_data(self):
-        """Load training and testing data from HDF5 files"""
+        """
+        Load training and testing data from HDF5 files.
+        
+        Loads preprocessed training and testing data, masks, and metadata from HDF5 files 
+        into instance variables.
+        
+        Args:
+            None: Uses config_handler
+            
+        Returns:
+            None: Modifies instance variables
+        """
         
         data_dir = self.config_handler.get_config_status("data_processing.saving_loading.processed_data_path")
         

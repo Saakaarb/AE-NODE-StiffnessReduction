@@ -1,6 +1,7 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
+import random
 
 # for the system created by the script 2_eq_system.py
 
@@ -55,3 +56,24 @@ def preprocess_data(data):
     network_input=np.concatenate([specie_data,Temp_data],axis=0)
 
     return time_data,specie_data,Temp_data,network_input
+
+
+def divide_range_random(start, end, group_size, seed=None):
+    """
+    Randomly divide a range [start, end) into groups of fixed size.
+    The last group will have the remaining elements if not divisible.
+
+    Args:
+        start (int): Start of the range (inclusive).
+        end (int): End of the range (exclusive).
+        group_size (int): Size of each group.
+        seed (int, optional): Random seed for reproducibility.
+
+    Returns:
+        list[list[int]]: A list of randomly shuffled groups.
+    """
+    numbers = list(range(start, end))
+    if seed is not None:
+        random.seed(seed)
+    random.shuffle(numbers)
+    return [numbers[i:i+group_size] for i in range(0, len(numbers), group_size)]

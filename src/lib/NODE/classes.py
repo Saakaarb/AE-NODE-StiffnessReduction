@@ -258,7 +258,7 @@ class Neural_ODE():
 
         success=1
         # sample data
-        data_dict=self.data_processing_handler.sample_training_data(num_samples=self.config_handler.get_config_status("neural_ode.training.batch_size"))
+        data_dict=self.data_processing_handler.sample_training_data()
 
         num_traj=data_dict['input_data'].shape[0]
         

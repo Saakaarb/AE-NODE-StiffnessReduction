@@ -2,7 +2,7 @@ data_processing:
 
     saving_loading:
         load_data: True # True/False
-        save_data: False # True/False
+        save_data: True # True/False
         raw_data_path: "script_data"
         processed_data_path: "processed_data"
 
@@ -13,6 +13,7 @@ data_processing:
     specie_train_index: [0,1,2,3,4] # which species should be in the training set
     data_arrange_mode: 'row_major' # each datapoint is a row in the data files
     latent_space_dim: 2
+    num_samples_per_batch: 128
 
 encoder_decoder:
     loading:
@@ -35,8 +36,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 50000
-        batch_size: 128 # number of trajectories to use in a single pass
+        num_training_iters: 20000
         
         print_freq: 100
 
@@ -73,8 +73,7 @@ neural_ode:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 5000
-        batch_size: 128 # number of trajectories to use in a single pass
+        num_training_iters: 10000
         
         print_freq: 100
 
