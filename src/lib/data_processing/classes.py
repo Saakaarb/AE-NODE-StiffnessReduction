@@ -4,6 +4,8 @@ import h5py
 import random
 from src.utils.helper_functions import preprocess_data,standard_score_norm,divide_range_random
 from src.utils.classes import ConfigReader
+import mlflow
+
 # This class loads and pre processes data to run the experiments
 
 class Data_Processing():
@@ -656,6 +658,9 @@ class Data_Processing():
             f.create_dataset('latent_space_mask_test', data=self.latent_space_mask_test, 
                             compression='gzip', compression_opts=9)
 
+        # log to mlflow
+        mlflow.log_artifact(os.path.join(data_dir, 'training_data.h5'), "training_data")
+        mlflow.log_artifact(os.path.join(data_dir, 'testing_data.h5'), "testing_data")
 
         print(f"Data saved to {data_dir}/")
 
@@ -726,4 +731,8 @@ class Data_Processing():
             self.max_test_traj_size = f.attrs['max_test_traj_size']
             self.num_timesteps_each_traj_test = f['num_timesteps_each_traj_test'][:]
         
+        # log to mlflow
+        mlflow.log_artifact(os.path.join(data_dir, 'training_data.h5'), "training_data")
+        mlflow.log_artifact(os.path.join(data_dir, 'testing_data.h5'), "testing_data")
+
         print(f"Data loaded from {data_dir}/")

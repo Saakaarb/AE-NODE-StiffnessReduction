@@ -2,9 +2,9 @@ from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from src.lib.NODE.classes import Neural_ODE
 from src.utils.classes import ConfigReader
+from src.utils.helper_functions import log_to_mlflow
 import os
 import jax
-#jax.config.update('jax_default_device', jax.devices('cpu')[0])
 from pathlib import Path
 import mlflow
 
@@ -20,19 +20,25 @@ if __name__=="__main__":
     config_handler=ConfigReader(str(config_path))
 
     # set up mlflow
-    mlflow.set_tracking_uri("./mlruns")
-    mlflow.set_experiment("AE_NODE")
-    mlflow.autolog()
+    
+    
+    
 
-    #with mlflow.start_run():
+    with mlflow.start_run():
+        mlflow.set_tracking_uri("./mlruns")
+        print("mlflow tracking uri set")
+        print("mlflow artifact uri:",mlflow.get_artifact_uri())
+        mlflow.set_experiment("AE_NODE")
+        
+        # log config to mlflow as a flattened dict
+        log_to_mlflow(config_handler.config_status,str(config_path))
 
+        # set up data processing
+        data_processing_handler=Data_Processing(config_handler)
 
-    # set up data processing
-    data_processing_handler=Data_Processing(config_handler)
+        # encoder-decoder
+        encoder_decoder_handler=Encoder_Decoder(config_handler,data_processing_handler)
 
-    # encoder-decoder
-    encoder_decoder_handler=Encoder_Decoder(config_handler,data_processing_handler)
-
-    # neural ode
-    neural_ode_handler=Neural_ODE(config_handler,data_processing_handler,encoder_decoder_handler)
+        # neural ode
+        neural_ode_handler=Neural_ODE(config_handler,data_processing_handler,encoder_decoder_handler)
 

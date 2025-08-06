@@ -2,6 +2,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import random
+import mlflow
 
 # for the system created by the script 2_eq_system.py
 
@@ -77,3 +78,31 @@ def divide_range_random(start, end, group_size, seed=None):
         random.seed(seed)
     random.shuffle(numbers)
     return [numbers[i:i+group_size] for i in range(0, len(numbers), group_size)]
+
+def log_to_mlflow(config_status,config_filename):
+        """Log all configuration parameters to MLflow"""
+        
+        def flatten_dict(d, parent_key='', sep='.'):
+            """Flatten nested dictionary with dot notation"""
+            items = []
+            for k, v in d.items():
+                new_key = f"{parent_key}{sep}{k}" if parent_key else k
+                if isinstance(v, dict):
+                    items.extend(flatten_dict(v, new_key, sep=sep).items())
+                else:
+                    items.append((new_key, v))
+            return dict(items)
+        
+        # Flatten the config and log each parameter
+        flat_config = flatten_dict(config_status)
+        for key, value in flat_config.items():
+            mlflow.log_param(key, value)
+        
+        # Log the config file as an artifact
+        mlflow.log_artifact(config_filename, "config")
+def log_to_mlflow_metrics(metrics_dict,step):
+    for key, value in metrics_dict.items():
+        mlflow.log_metric(key, value, step=step)
+
+def log_to_mlflow_artifacts(artifact_path,artifact_name):
+    mlflow.log_artifact(artifact_path,artifact_name)
