@@ -5,7 +5,7 @@ import jax
 import optax
 import numpy as np
 from src.utils.classes import ConfigReader,MLP
-from src.utils.helper_functions import _forward_pass
+from src.utils.helper_functions import _forward_pass,log_to_mlflow_metrics,log_to_mlflow_artifacts
 from src.lib.data_processing.classes import Data_Processing
 from pathlib import Path
 import time
@@ -221,6 +221,9 @@ class Encoder_Decoder():
 
             print(f"Iteration number: {train_step}, loss: {value}, test error: {error}, best test loss: {self.best_test_loss}")
         
+            # log to mlflow
+            log_to_mlflow_metrics({'enc_dec_training_loss':value,'enc_dec_test_loss':error},train_step)
+
             if  True:#error<self.best_test_loss:
                 print(f"New best test loss: {error}, recording weights")
                 self.best_test_loss=error
@@ -241,8 +244,6 @@ class Encoder_Decoder():
 
         enc_dec_res_dir=Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))
 
-
-
         std_vals_inp=self.test_constants['std_vals_inp'].reshape(1,1,-1)
         mean_vals_inp=self.test_constants['mean_vals_inp'].reshape(1,1,-1)
 
@@ -251,8 +252,6 @@ class Encoder_Decoder():
         latent_space_preds=_forward_pass(input_data,enc_weights)
         
         input_preds=_forward_pass(latent_space_preds,dec_weights)
-
-        
 
         # compute error
         error=jnp.sqrt(jnp.mean(jnp.square(input_data-input_preds)))
@@ -289,6 +288,9 @@ class Encoder_Decoder():
             with open(enc_dec_res_dir/Path('true_data.pkl'),'wb') as f:
                 pickle.dump(true_lists,f,pickle.HIGHEST_PROTOCOL)
 
+            # log to mlflow
+            log_to_mlflow_artifacts(enc_dec_res_dir/Path('predictions.pkl'),"predictions_enc_dec")
+            log_to_mlflow_artifacts(enc_dec_res_dir/Path('true_data.pkl'),"true_data_enc_dec")
         
         return error
     
@@ -355,3 +357,5 @@ class Encoder_Decoder():
             plt.savefig(i_traj_viz_dir/Path(f"input_{num_inputs-1}.png"))
             plt.close()
         
+        # log to mlflow
+        log_to_mlflow_artifacts(viz_dir,"visualization_test_enc_dec")

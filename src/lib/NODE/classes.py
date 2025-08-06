@@ -7,7 +7,7 @@ import optax
 from functools import partial
 import pickle
 import os
-from src.utils.helper_functions import _forward_pass
+from src.utils.helper_functions import _forward_pass,log_to_mlflow_artifacts,log_to_mlflow_metrics
 from src.utils.classes import ConfigReader,MLP
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
@@ -366,6 +366,8 @@ class Neural_ODE():
                 #self.encoder_decoder_handler.encoder_object.weights=self.trainable_variables_NODE['encoder']
                 #self.encoder_decoder_handler.decoder_object.weights=self.trainable_variables_NODE['decoder']
         
+            # log to mlflow
+            log_to_mlflow_metrics({'node_training_loss':value,'node_test_loss':test_loss},train_step)
         #print(f"Step: {train_step}, training loss: {value}")
 
         #self.NODE_object.weights=self.trainable_variables_NODE['NODE']
@@ -415,8 +417,6 @@ class Neural_ODE():
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:
                 print(f"Integration failed for trajectory {i_traj+1} of {num_test_traj}")
                 
-
-
             latent_space_pred=jnp.squeeze(solution.ys)
             phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
 
@@ -447,6 +447,9 @@ class Neural_ODE():
         with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("true_list.pkl"),'wb') as f:
             pickle.dump(testing_true_list,f,pickle.HIGHEST_PROTOCOL)
 
+        # log to mlflow
+        log_to_mlflow_artifacts(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("predictions.pkl"),"predictions_node")
+        log_to_mlflow_artifacts(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("true_list.pkl"),"true_list_node")
         
     # save neural ODE weights out
     def save_NODE_weights(self):
@@ -527,3 +530,6 @@ class Neural_ODE():
                 plt.yscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['yscale'])
             plt.savefig(i_traj_viz_dir/Path(f"input_{num_inputs-1}.png"))
             plt.close()
+
+        # log to mlflow
+        log_to_mlflow_artifacts(viz_dir,"visualization_test_node")
