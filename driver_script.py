@@ -20,9 +20,6 @@ if __name__=="__main__":
     config_handler=ConfigReader(str(config_path))
 
     # set up mlflow
-    
-    
-    
 
     with mlflow.start_run():
         mlflow.set_tracking_uri("./mlruns")
