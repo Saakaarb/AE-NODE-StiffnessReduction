@@ -76,7 +76,7 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     term = diffrax.ODETerm(_ode_fn)
     #rtol=jnp.array([1E-2,1E-3])
 
-
+    # TODO try batched euler within diffrax diffeqsolve
     solution = diffrax.diffeqsolve(term,diffrax.Dopri5(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
                                     max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=pcoeff,icoeff=icoeff,rtol=rtol, atol=atol,dtmin=dtmin))

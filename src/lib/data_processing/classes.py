@@ -5,6 +5,7 @@ import random
 from src.utils.helper_functions import preprocess_data,standard_score_norm,divide_range_random
 from src.utils.classes import ConfigReader
 import mlflow
+import jax
 
 # This class loads and pre processes data to run the experiments
 
@@ -95,6 +96,9 @@ class Data_Processing():
         # lists for important information
         self.num_timesteps_each_traj_train=np.zeros(len(self.train_data_files_list),dtype=int)
         self.num_timesteps_each_traj_test=np.zeros(len(self.test_data_files_list),dtype=int)
+
+        # detect devices
+        self.device = jax.devices()[0] if jax.device_count() > 0 else jax.devices()[0]
 
         # load saved data
         if self.config_handler.get_config_status("data_processing.saving_loading.load_data"):
@@ -531,17 +535,17 @@ class Data_Processing():
             cond_2_mask_subset=self.cond_2_mask_train[sample_indices]
             all_time_data_broadcasted_subset=self.all_time_data_broadcasted_train[sample_indices]
 
-            # TODO add jax.device_put() to move to GPU
+            
             subset_dict={
-                "input_data":input_data_subset,
-                "time_data":time_data_subset,
-                "start_end_time_data":start_end_time_data_subset,
-                "initial_condition_data":initial_condition_data_subset,
-                "recon_mask":recon_mask_subset,
-                "latent_space_mask":latent_space_mask_subset,
-                "cond_1_mask":cond_1_mask_subset,
-                "cond_2_mask":cond_2_mask_subset,
-                "all_time_data_broadcasted":all_time_data_broadcasted_subset
+                "input_data":self._place_on_device(input_data_subset),
+                "time_data":self._place_on_device(time_data_subset),
+                "start_end_time_data":self._place_on_device(start_end_time_data_subset),
+                "initial_condition_data":self._place_on_device(initial_condition_data_subset),
+                "recon_mask":self._place_on_device(recon_mask_subset),
+                "latent_space_mask":self._place_on_device(latent_space_mask_subset),
+                "cond_1_mask":self._place_on_device(cond_1_mask_subset),
+                "cond_2_mask":self._place_on_device(cond_2_mask_subset),
+                "all_time_data_broadcasted":self._place_on_device(all_time_data_broadcasted_subset)
             }
 
             self.data_samples_train.append(subset_dict)
@@ -736,3 +740,9 @@ class Data_Processing():
         mlflow.log_artifact(os.path.join(data_dir, 'testing_data.h5'), "testing_data")
 
         print(f"Data loaded from {data_dir}/")
+    
+    def _place_on_device(self,data):
+        """Place numpy array on GPU device and convert to JAX array"""
+        if isinstance(data, np.ndarray):
+            return jax.device_put(data, self.device)
+        return data 

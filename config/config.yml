@@ -13,12 +13,12 @@ data_processing:
     specie_train_index: [0,1,2,3,4] # which species should be in the training set
     data_arrange_mode: 'row_major' # each datapoint is a row in the data files
     latent_space_dim: 2
-    num_samples_per_batch: 128
+    num_samples_per_batch: 1024
 
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: False # True/False
+        load_model: True # True/False
         model_output_dir: 'encoder_decoder_weights'
         load_path: 'encoder_decoder_weights.pkl' 
 
