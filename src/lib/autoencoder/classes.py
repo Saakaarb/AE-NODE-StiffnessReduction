@@ -45,12 +45,20 @@ def _loss_fn_autoencoder(constants,networks,data_dict):
     # Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics: Dikeman, Zhang and Yang (2022)
     # and introduces a multi-objective optimization term
 
-    cond_1=jnp.multiply(jnp.true_divide(latent_space_preds.at[:,2:,:].get()-latent_space_preds.at[:,1:-1,:].get(),time_data[:,2:,:]-time_data[:,1:-1,:]+eps_dt),cond_1_mask)
+    dt = jnp.diff(time_data, axis=1)  # Shape: [batch, time-1, features]
+    dlatent = jnp.diff(latent_space_preds, axis=1)  # Shape: [batch, time-1, features]
+
+    # Compute derivatives
+    cond_1 = jnp.divide(dlatent[:,1:,:], dt[:,1:,:] + eps_dt) * cond_1_mask
+    cond_2 = jnp.divide(dlatent[:,:-1,:], dt[:,:-1,:] + eps_dt) * cond_2_mask
+
+    #cond_1=jnp.multiply(jnp.true_divide(latent_space_preds.at[:,2:,:].get()-latent_space_preds.at[:,1:-1,:].get(),time_data[:,2:,:]-time_data[:,1:-1,:]+eps_dt),cond_1_mask)
     
-    cond_2=jnp.multiply(jnp.true_divide(latent_space_preds.at[:,1:-1,:].get()-latent_space_preds.at[:,:-2,:].get(),time_data[:,1:-1,:]-time_data[:,:-2,:]+eps_dt),cond_2_mask)
+    #cond_2=jnp.multiply(jnp.true_divide(latent_space_preds.at[:,1:-1,:].get()-latent_space_preds.at[:,:-2,:].get(),time_data[:,1:-1,:]-time_data[:,:-2,:]+eps_dt),cond_2_mask)
     
     cond_numer= jnp.sqrt(jnp.mean(jnp.square(cond_1-cond_2)+eps,axis=1))
-    cond_3= jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_preds.at[:,2:,:].get()-latent_space_preds.at[:,:-2,:].get()+eps,cond_1_mask))))
+    #cond_3= jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_preds.at[:,2:,:].get()-latent_space_preds.at[:,:-2,:].get()+eps,cond_1_mask))))
+    cond_3 = jnp.sqrt(jnp.mean(jnp.square(dlatent[:,1:,:] - dlatent[:,:-1,:]), axis=1))
 
     cond_loss=jnp.mean(cond_numer/(cond_3))
     
@@ -209,7 +217,7 @@ class Encoder_Decoder():
         self.trainable_variables.update(results)
 
         # according to update criteria, update the encoder and decoder weights
-
+        
         if train_step%self.print_freq==0:
 
             # update values in object, which is used to compute test error
@@ -229,7 +237,7 @@ class Encoder_Decoder():
                 self.best_test_loss=error
                 self.encoder_object.weights=self.trainable_variables['encoder']
                 self.decoder_object.weights=self.trainable_variables['decoder']
-
+        
         return opt_state
 
     def loss_fn(self,constants,networks,data_dict):
