@@ -77,10 +77,14 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     #rtol=jnp.array([1E-2,1E-3])
 
     # TODO try batched euler within diffrax diffeqsolve
-    solution = diffrax.diffeqsolve(term,diffrax.Dopri5(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
-                                    saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
-                                    max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=pcoeff,icoeff=icoeff,rtol=rtol, atol=atol,dtmin=dtmin))
+    #solution = diffrax.diffeqsolve(term,diffrax.Dopri5(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
+    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
+    #                                max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=pcoeff,icoeff=icoeff,rtol=rtol, atol=atol,dtmin=dtmin))
     
+    solution = diffrax.diffeqsolve(term,diffrax.Euler(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
+                                    saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
+                                    max_steps=10000)
+   
     #solution = diffrax.diffeqsolve(term,diffrax.Kvaerno5(),t0=t_init,t1=t_final,dt0 = 1e-11,y0=y_latent_init,
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
     #                                max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=0.3,icoeff=0.4,rtol=1e-6, atol=1e-8,dtmin=None))
@@ -90,74 +94,46 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
 
 @partial(jax.jit,static_argnums=(4,))
 def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj):
-  
+    
+    # masks
+    recon_mask=data_dict['recon_mask']
+    latent_space_mask=data_dict['latent_space_mask']
+    input_data=data_dict['input_data']
+    
+    # Create a vectorized version of the single-trajectory loss computation
+    def single_trajectory_loss(i_traj):
+        recon_mask_curr=recon_mask[i_traj,:,:]
+        latent_space_mask_curr=latent_space_mask[i_traj,:,:]
+        phys_data=input_data[i_traj,:,:]
 
-        loss_l1=0.0
-        loss_l3=0.0
-       
-        # masks
-        recon_mask=data_dict['recon_mask']
-        latent_space_mask=data_dict['latent_space_mask']
-        input_data=data_dict['input_data']
+        solution=_integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj)
+
+        failed = jnp.logical_or(solution.result == RESULTS.max_steps_reached, solution.result==RESULTS.singular)
+
+        # predicted output in latent space
+        latent_space_pred=jnp.squeeze(solution.ys)
+
+        # prediction after integration
+        phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
         
-        loss_comp_success=jnp.ones(num_traj)
-        #if True:
-        def loss_fn(carry,i_traj):
-            
-            loss_l1,loss_l3,loss_comp_success_itraj=carry
+        loss_L1=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
 
-            recon_mask_curr=recon_mask[i_traj,:,:]
-            latent_space_mask_curr=latent_space_mask[i_traj,:,:]
-            phys_data=input_data[i_traj,:,:]
+        # latent space truth
+        latent_space_truth=_forward_pass(phys_data,enc_dec_weights['encoder'])
 
-            solution=_integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj)
+        loss_L3=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
+        
+        return loss_L1, loss_L3, jnp.where(failed, 0.0, 1.0)
 
-            failed = jnp.logical_or(solution.result == RESULTS.max_steps_reached, solution.result==RESULTS.singular)
+    # Vectorize over all trajectories
+    losses_L1, losses_L3, loss_comp_success = jax.vmap(single_trajectory_loss)(jnp.arange(num_traj))
+    
+    # Sum up the losses
+    loss_l1 = jnp.sum(losses_L1)
+    loss_l3 = jnp.sum(losses_L3)
+    total_success = jnp.sum(loss_comp_success)
 
-            # if integration failed, set loss_comp_success_itraj to 0
-            loss_comp_success_itraj=loss_comp_success_itraj.at[i_traj].set(jnp.where(failed,0.0,1.0))
-
-            #SECTION L1 (ENC+NODE+DEC)
-            #---------------------------------------------------------------------------------
-           
-            # predicted output in latent space
-            latent_space_pred=jnp.squeeze(solution.ys)
-
-            # prediction after integration
-            phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
-
-            
-            loss_L1=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
-
-
-            #---------------------------------------------------------------------------------
-            #SECTION L2 (ENC+DEC)
-            #---------------------------------------------------------------------------------
-            # TODO only keep for simultaneous training
-            #y_latent_all = _forward_pass(phys_data,enc_dec_weights['encoder'])    
-            #phys_space_pred_data = _forward_pass(y_latent_all,enc_dec_weights['decoder'])
-            
-            # TODO employ filters
-            #loss_L2= jnp.sqrt(jnp.mean(jnp.square(phys_data-phys_space_pred_data)))
-
-            #SECTION L3 (ENC+NODE)
-            #---------------------------------------------------------------------------------
-            # TODO can be removed outside
-            latent_space_truth=_forward_pass(phys_data,enc_dec_weights['encoder'])
-
-            #TODO apply filters
-            loss_L3=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
-            loss_l1+=loss_L1
-            loss_l3+=loss_L3
-            return (loss_l1,loss_l3,loss_comp_success_itraj),None
-
-        losses,_=jax.lax.scan(loss_fn,(loss_l1,loss_l3,loss_comp_success),jnp.arange(num_traj))
-
-        loss_l1=losses[0]
-        loss_l3=losses[1]
-        loss_comp_success=losses[2]
-
-        return (loss_l1+loss_l3)/jnp.sum(loss_comp_success)
+    return (loss_l1 + loss_l3) / total_success
 
 class Neural_ODE():
 
@@ -325,10 +301,6 @@ class Neural_ODE():
         #else:
         value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights,data_dict,num_traj)
 
-        if value>1E5/num_traj:
-            print("Loss is too high, skipping update. This indicates failure to integrate.")
-            success=0
-            return opt_state,success
         
         #if self.trainable_enc_dec:
         #    grad_loss={'NODE':grad_loss[0]['NODE'],'encoder':grad_loss[1]['encoder'],'decoder':grad_loss[1]['decoder']}
@@ -349,7 +321,12 @@ class Neural_ODE():
         
         if train_step % self.print_freq==0:
             #self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
-            
+            if value>1E5/num_traj:
+                print("Loss is too high, skipping update. This indicates failure to integrate.")
+                success=0
+                return opt_state,success
+
+
             test_loss=self.loss_fn(self.test_constants,self.trainable_variables_NODE,self.enc_dec_weights,self.test_data_dict,self.test_constants['num_test_traj'])
 
             self.training_loss_values.append(value)
@@ -368,6 +345,7 @@ class Neural_ODE():
         
             # log to mlflow
             log_to_mlflow_metrics({'node_training_loss':value,'node_test_loss':test_loss},train_step)
+            
         #print(f"Step: {train_step}, training loss: {value}")
 
         #self.NODE_object.weights=self.trainable_variables_NODE['NODE']
@@ -401,8 +379,8 @@ class Neural_ODE():
         
         # get ground truth labels
         raw_testing_data=self.data_processing_handler.get_raw_testing_data().copy()
-        testing_predictions_list={'times_list_test':[],'specie_list_test':[],'temps_list_test':[]}
-        testing_true_list={'times_list_test':[],'specie_list_test':[],'temps_list_test':[]}
+        testing_predictions_list={'times_list_test':[],'feature_list_test':[]}
+        testing_true_list={'times_list_test':[],'feature_list_test':[]}
 
         # get mean and std of inputs
         # make shape (1,num_inputs) since each trajectory is computed separately
@@ -433,13 +411,11 @@ class Neural_ODE():
 
             # append to testing lists
             testing_predictions_list['times_list_test'].append(pred_ts[i_traj,:num_timesteps_each_traj_test[i_traj]])
-            testing_predictions_list['specie_list_test'].append(pred_ys[i_traj,:num_timesteps_each_traj_test[i_traj],:-1])
-            testing_predictions_list['temps_list_test'].append(pred_ys[i_traj,:num_timesteps_each_traj_test[i_traj],num_inputs-1])
+            testing_predictions_list['feature_list_test'].append(pred_ys[i_traj,:num_timesteps_each_traj_test[i_traj],:])
 
             # append to true lists
             testing_true_list['times_list_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
-            testing_true_list['specie_list_test'].append(true_ys[:num_timesteps_each_traj_test[i_traj],:-1])
-            testing_true_list['temps_list_test'].append(true_ys[:num_timesteps_each_traj_test[i_traj],num_inputs-1])
+            testing_true_list['feature_list_test'].append(true_ys[:num_timesteps_each_traj_test[i_traj],:])
 
         # save predictions and true values
         with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("predictions.pkl"),'wb') as f:
@@ -496,17 +472,17 @@ class Neural_ODE():
             true_lists=pickle.load(f)
 
         # loop over saved trajectories and return comparison plots for each species and temperature
-        for i_traj in range(len(prediction_lists['specie_list_test'])):
+        for i_traj in range(len(prediction_lists['feature_list_test'])):
             i_traj_viz_dir=viz_dir/Path(f"traj_{i_traj}")
             os.mkdir(i_traj_viz_dir)
 
             num_inputs=self.test_constants['num_inputs']
 
-            for i_input in range(num_inputs-1):
+            for i_input in range(num_inputs):
                 plt.plot(prediction_lists['times_list_test'][i_traj],
-                         prediction_lists['specie_list_test'][i_traj][:,i_input],label='predicted')
+                         prediction_lists['feature_list_test'][i_traj][:,i_input],label='predicted')
                 plt.plot(true_lists['times_list_test'][i_traj],
-                         true_lists['specie_list_test'][i_traj][:,i_input],label='true')
+                         true_lists['feature_list_test'][i_traj][:,i_input],label='true')
                 plt.legend()
                 plt.grid()
                 plt.xlabel('Independent Variable')
@@ -518,18 +494,6 @@ class Neural_ODE():
                     plt.yscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['yscale'])
                 plt.savefig(i_traj_viz_dir/Path(f"input_{i_input}.png"))
                 plt.close()
-            
-            plt.plot(prediction_lists['times_list_test'][i_traj],
-                     prediction_lists['temps_list_test'][i_traj],label='predicted')
-            plt.plot(true_lists['times_list_test'][i_traj],
-                     true_lists['temps_list_test'][i_traj],label='true')
-            
-            if 'xscale' in self.config_handler.get_config_status("neural_ode.testing.visualization.settings").keys():
-                plt.xscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['xscale'])
-            if 'yscale' in self.config_handler.get_config_status("neural_ode.testing.visualization.settings").keys():
-                plt.yscale(self.config_handler.get_config_status("neural_ode.testing.visualization.settings")['yscale'])
-            plt.savefig(i_traj_viz_dir/Path(f"input_{num_inputs-1}.png"))
-            plt.close()
 
         # log to mlflow
         log_to_mlflow_artifacts(viz_dir,"visualization_test_node")
