@@ -9,17 +9,41 @@ Recent works have leveraged machine learning to create models that reduce the co
 # Methodology
 
 
-
 Features:
 
-Encoder to change physical space to a "stiffness reduced" latent space
+Encoder to change physical space to a "stiffness reduced" and dimension reduced latent space
+    - Includes a latent space stiffness reduction term. can be turned off by setting the weight (stiffness reduction weight) to 0
+    - 
 Neural ODE to step through time, backpropagating gradients in this latent space
+    - diffrax
+    - euler stepping
+    - handles failure
+    -
 decoder to change back to physical space
 Scaling to alleviate training issues
+    - automated input normalization
+    - Automated scaling of NODE inputs and outputs
+GPU optimized implementation
+    - Minimal H2D transfers
 
-Upcoming features:
+supports any dataset; see config file
+controlled from config file
 
-GPU-optimized JAX implementation
+TODO:
+Further GPU optimization
+    - Setup prefetch
+L-BFGS training
+
+Tips:
+
+1. Train encoder decoder for a while; unstable enc dec causes NODE failure quite quickly
+2. You have the option of selecting which rows/columns to include in the training set. Make sure all features 
+   that are causative are included in the training data. For example, if modeling a chemical reaction, by not including the temperature, the network cannot learn the appropriate cause effect relationships from data and this will result
+   in a poor model
+3. The init_dt is kept constant (for now, this package uses only explicit euler training). Make sure this init_dt is     small enough to capture the smallest timescale of your system. Else it will result in poor models
+
+4. try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
+5. Ensure the batch size is small enough such that it plus computations can fit on device
 
 
 This repo leverages techniques and ideas from the following works:
