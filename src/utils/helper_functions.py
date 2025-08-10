@@ -19,45 +19,75 @@ def _forward_pass(network_input,network):
 
     return interm_comp
 
-def standard_score_norm(time_data,specie_data,Temp_data,):
+def standard_score_norm(time_data,feature_data):
 
     # use true ODE function to get normalizations for both inputs and outputs
     
     #inputs:
-    mean_vals_inp=np.zeros(specie_data.shape[0]+1)
-    std_vals_inp=np.zeros(specie_data.shape[0]+1)
+    mean_vals_inp=np.zeros(feature_data.shape[0])
+    std_vals_inp=np.zeros(feature_data.shape[0])
 
-    for i in range(specie_data.shape[0]+1):
+    for i in range(feature_data.shape[0]):
 
-        if i==specie_data.shape[0]:
+        mean_vals_inp[i]=np.mean(feature_data[i,:])
+        std_vals_inp[i]=np.std(feature_data[i,:])
 
-            mean_vals_inp[i]=np.mean(Temp_data)
-            std_vals_inp[i]=np.std(Temp_data)
-        else:    
-            mean_vals_inp[i]=np.mean(specie_data[i,:])
-            if np.std(specie_data[i,:])==0.0:
-                std_vals_inp[i]=1.0
-            else:
-                std_vals_inp[i]=np.std(specie_data[i,:])
     #outputs
-    
-    mean_vals_out=np.zeros(specie_data.shape[0])
-    std_vals_out=np.zeros(specie_data.shape[0])
+    # these are same as inp since the mapping space is the same
+    #mean_vals_out=np.zeros(feature_data.shape[0])
+    #std_vals_out=np.zeros(feature_data.shape[0])
+    mean_vals_out=mean_vals_inp
+    std_vals_out=std_vals_inp
 
     return mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out
 
-def preprocess_data(data):
+def process_raw_data(data,config_handler):
+
+    if config_handler.get_config_status('data_processing.data_arrange_mode')=='row_major':
+
+        time_data,feature_data=extract_row_major_data(data,config_handler)
+    elif config_handler.get_config_status('data_processing.data_arrange_mode')=='column_major':
+
+        time_data,feature_data=extract_column_major_data(data,config_handler)
+
+    return time_data,feature_data
+
+
+def extract_row_major_data(data,config_handler):
+
+    # get indices to extract (user specified)
+
+    # assert that user provided total  matches number of rows in data
+    total_feats=config_handler.get_config_status('data_processing.total_available_features')
+
+    if data.shape[0]!=total_feats+1:
+        raise ValueError(f"Number of rows in data ({data.shape[0]}) does not match the total number of features ({total_feats})")
+
+    # get indices to extract (user specified)
+    feature_indices=config_handler.get_config_status('data_processing.feature_train_index')
+
+    if isinstance(feature_indices,str):
+        if feature_indices=='all':
+            feature_indices=list(range(1,total_feats))
+        else:
+            raise ValueError(f"Invalid feature indices: {feature_indices}. Current options are 'all' or a list of indices.")
+
+    elif isinstance(feature_indices,list):
+        if 0 in feature_indices:
+            raise ValueError(f"0 is not a valid training feature index. It MUST correspond to the time column of every data file.\
+                 Check the config file for the feature_train_index.")
+
+    else:
+        raise ValueError(f"Invalid feature indices: {feature_indices}. Current options are 'all' or a list of indices.")
 
     time_data=data[0,:]
-    specie_data=data[1:-2,:] # skip N2
-    Temp_data=data[-1,:]
-
-    Temp_data=np.expand_dims(Temp_data,axis=0)
+    feature_data=data[feature_indices,:] 
     
-    network_input=np.concatenate([specie_data,Temp_data],axis=0)
+    return time_data,feature_data
 
-    return time_data,specie_data,Temp_data,network_input
+def extract_column_major_data(data,config_handler):
 
+    raise NotImplementedError("Column major data format not implemented yet")
 
 def divide_range_random(start, end, group_size, seed=None):
     """

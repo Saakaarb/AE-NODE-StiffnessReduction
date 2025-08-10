@@ -2,7 +2,7 @@ import numpy as np
 import os
 import h5py
 import random
-from src.utils.helper_functions import preprocess_data,standard_score_norm,divide_range_random
+from src.utils.helper_functions import process_raw_data,standard_score_norm,divide_range_random
 from src.utils.classes import ConfigReader
 import mlflow
 import jax
@@ -25,13 +25,11 @@ class Data_Processing():
 
         # list objects that are created during pre processing
         self.times_list_train=[]
-        self.specie_list_train=[]
-        self.temps_list_train=[]
+        self.feature_list_train=[]
         self.inputs_list_train=[]
 
         self.times_list_test=[]
-        self.specie_list_test=[]
-        self.temps_list_test=[]
+        self.feature_list_test=[]
         self.inputs_list_test=[]
 
         # max trajectory size
@@ -150,8 +148,8 @@ class Data_Processing():
             data=np.genfromtxt(data_file,delimiter=',')
 
             #TODO this is a custom preprocessing function for the data
-            # outputs: time_data(Nts,),specie_data(Nsp,Nts),Temp_data(1,Nts)
-            time_data,specie_data,Temp_data,network_input=preprocess_data(data)
+            # outputs: time_data(Nts,),feature_data(Nfeat,Nts)
+            time_data,feature_data=process_raw_data(data,self.config_handler)
 
             if self.config_handler.get_config_status("data_processing.check_raw_data_shape"):
                 pass
@@ -167,29 +165,28 @@ class Data_Processing():
 
             # get (approx) standard score normalization parameters
             if i_traj==0:
-                mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out=standard_score_norm(time_data,specie_data,Temp_data)
+                mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out=standard_score_norm(time_data,feature_data)
                 self.mean_vals_inp=mean_vals_inp
                 self.std_vals_inp=std_vals_inp
                 self.mean_vals_out=mean_vals_out
                 self.std_vals_out=std_vals_out
                 print("Warning: using only the first trajectory to get standard score normalization parameters")
                 self.end_time=time_data[-1]
-                self.num_inputs=network_input.shape[0]
+                self.num_inputs=feature_data.shape[0]
                 self.latent_scaling=np.ones(int(self.config_handler.get_config_status("data_processing.latent_space_dim")))
                 # inferred from data
                 self.config_handler.set_config_status("data_processing.num_inputs",self.num_inputs)
             else:
                 if time_data[-1]!=self.end_time:
                     raise ValueError("End time is not the same for all trajectories!")
-                if network_input.shape[0]!=self.num_inputs:
+                if feature_data.shape[0]!=self.num_inputs:
                     raise ValueError("Number of inputs is not the same for all trajectories!")
 
-            network_input=(network_input-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
+            network_input=(feature_data-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
 
 
             self.times_list_train.append(time_data)
-            self.specie_list_train.append(specie_data)
-            self.temps_list_train.append(Temp_data)
+            self.feature_list_train.append(feature_data)
             self.inputs_list_train.append(network_input)
 
         self.num_train_traj=len(self.train_data_files_list)
@@ -215,19 +212,18 @@ class Data_Processing():
             data=np.genfromtxt(data_file,delimiter=',')
 
             #TODO this is a custom preprocessing function for the data
-            time_data,specie_data,Temp_data,network_input=preprocess_data(data)
+            time_data,feature_data=process_raw_data(data,self.config_handler)
             self.num_timesteps_each_traj_test[i_traj]=time_data.shape[0]
 
             if self.max_test_traj_size<self.num_timesteps_each_traj_test[i_traj]:
                 self.max_test_traj_size=int(self.num_timesteps_each_traj_test[i_traj])      
 
             
-            network_input=(network_input-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
+            network_input=(feature_data-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
 
 
             self.times_list_test.append(time_data)
-            self.specie_list_test.append(specie_data)
-            self.temps_list_test.append(Temp_data)
+            self.feature_list_test.append(feature_data)
             self.inputs_list_test.append(network_input)
 
         self.num_test_traj=len(self.test_data_files_list)
@@ -416,8 +412,7 @@ class Data_Processing():
         
         return {
             "times_list_train":self.times_list_train,
-            "specie_list_train":self.specie_list_train,
-            "temps_list_train":self.temps_list_train,
+            "feature_list_train":self.feature_list_train,
             "inputs_list_train":self.inputs_list_train,
         }
 
@@ -436,8 +431,7 @@ class Data_Processing():
 
         return {
             "times_list_test":self.times_list_test,
-            "specie_list_test":self.specie_list_test,
-            "temps_list_test":self.temps_list_test,
+            "feature_list_test":self.feature_list_test,
             "inputs_list_test":self.inputs_list_test,
         }
 

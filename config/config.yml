@@ -9,8 +9,10 @@ data_processing:
     # data processing information
     train_split_ratio: 0.9
     check_raw_data_shape: True
-    num_species_total: 6
-    specie_train_index: [0,1,2,3,4] # which species should be in the training set
+    total_available_features: 7 # the total number of features in the data. This does NOT include time,
+                                # assumed to be the first row/column (at index 0)
+    feature_train_index: [1,2,3,4,5,7] #the row/column indices (0 indexed) from the dataset of which species should be in the training set
+                                        # DO NOT include 0; this will raise an error
     data_arrange_mode: 'row_major' # each datapoint is a row in the data files
     latent_space_dim: 2
     num_samples_per_batch: 1024
@@ -18,7 +20,7 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: True # True/False
+        load_model: False # True/False
         model_output_dir: 'encoder_decoder_weights'
         load_path: 'encoder_decoder_weights.pkl' 
 
@@ -37,7 +39,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 20000
+        num_training_iters: 200
         
         print_freq: 100
 
@@ -49,7 +51,7 @@ encoder_decoder:
         stiffness_reduction_weight: 1E-9 # weight for stiffness reduction loss
     
     testing:
-        test_model: False # True/False
+        test_model: True # True/False
         save_dir: "enc_dec_results"
         visualization:
             plot_results: True # True/False
@@ -79,9 +81,9 @@ neural_ode:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 10000
+        num_training_iters: 10
         
-        print_freq: 100
+        print_freq: 1
 
         simultaneous_training: False # True/False
 
@@ -92,11 +94,10 @@ neural_ode:
         rtol: 1e-1
         atol: 1e-1
         dtmin: None
-        init_dt: 1E-12
+        init_dt: 1E-11
 
     testing:
         test_model: True # True/False
-        plot_results: False # True/False
         save_dir: "NODE_results"
         visualization:
             plot_results: True # True/False
