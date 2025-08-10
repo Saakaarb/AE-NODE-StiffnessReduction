@@ -101,7 +101,7 @@ class LoggingManager:
         # Create timestamped log file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_filename = os.path.join(self.log_dir, f"neural_ode_{timestamp}.log")
-        
+        self.log_filename=log_filename
         # Set up logging
         logging.basicConfig(
             level=self.log_level,

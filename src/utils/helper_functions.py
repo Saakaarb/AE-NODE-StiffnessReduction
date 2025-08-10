@@ -61,7 +61,7 @@ def extract_row_major_data(data,config_handler):
     total_feats=config_handler.get_config_status('data_processing.total_available_features')
 
     if data.shape[0]!=total_feats+1:
-        raise ValueError(f"Number of rows in data ({data.shape[0]}) does not match the total number of features ({total_feats})")
+        raise ValueError(f"Number of rows in data ({data.shape[0]}) - 1 does not match the total number of features ({total_feats})")
 
     # get indices to extract (user specified)
     feature_indices=config_handler.get_config_status('data_processing.feature_train_index')
@@ -87,7 +87,36 @@ def extract_row_major_data(data,config_handler):
 
 def extract_column_major_data(data,config_handler):
 
-    raise NotImplementedError("Column major data format not implemented yet")
+    # get indices to extract (user specified)
+
+    # assert that user provided total  matches number of rows in data
+    total_feats=config_handler.get_config_status('data_processing.total_available_features')
+
+    if data.shape[1]!=total_feats+1:
+        raise ValueError(f"Number of columns in data ({data.shape[1]}) -1 does not match the total number of features ({total_feats})")
+
+    # get indices to extract (user specified)
+    feature_indices=config_handler.get_config_status('data_processing.feature_train_index')
+
+    if isinstance(feature_indices,str):
+        if feature_indices=='all':
+            feature_indices=list(range(1,total_feats))
+        else:
+            raise ValueError(f"Invalid feature indices: {feature_indices}. Current options are 'all' or a list of indices.")
+
+    elif isinstance(feature_indices,list):
+        if 0 in feature_indices:
+            raise ValueError(f"0 is not a valid training feature index. It MUST correspond to the time column of every data file.\
+                 Check the config file for the feature_train_index.")
+
+    else:
+        raise ValueError(f"Invalid feature indices: {feature_indices}. Current options are 'all' or a list of indices.")
+
+    time_data=data[:,0]
+    feature_data=data[:,feature_indices] 
+    # transpose feature data to keep consistency
+    return time_data,feature_data.T
+    
 
 def divide_range_random(start, end, group_size, seed=None):
     """
