@@ -12,7 +12,7 @@ data_processing:
     total_available_features: 7 # the total number of features in the data. This does NOT include time,
                                 # assumed to be the first row/column (at index 0)
     feature_train_index: [1,2,3,4,5,7] #the row/column indices (0 indexed) from the dataset of which species should be in the training set
-                                        # DO NOT include 0; this will raise an error
+                                        # DO NOT include 0 (assumed to be time); this will raise an error
     data_arrange_mode: 'row_major' # each datapoint is a row in the data files
     latent_space_dim: 2
     num_samples_per_batch: 1024
@@ -89,12 +89,13 @@ neural_ode:
 
     ode_solver:
         
-        pcoeff: 0.3
-        icoeff: 0.4
-        rtol: 1e-1
-        atol: 1e-1
+        pcoeff: 0.3 # predictor coefficient
+        icoeff: 0.4 # corrector coefficient
+        rtol: 1e-1 # relative tolerance
+        atol: 1e-1 # absolute tolerance
         dtmin: None
-        init_dt: 1E-11
+        init_dt: 1E-11 # explicit euler integration timestep; make sure this is small enough to capture
+                        # the smallest timescale in the system
 
     testing:
         test_model: True # True/False
