@@ -3,7 +3,7 @@ import os
 import h5py
 import random
 from src.utils.helper_functions import process_raw_data,standard_score_norm,divide_range_random
-from src.utils.classes import ConfigReader
+from src.utils.classes import ConfigReader,LoggingManager
 import mlflow
 import jax
 
@@ -11,7 +11,7 @@ import jax
 
 class Data_Processing():
 
-    def __init__(self, config_handler:ConfigReader)->None:
+    def __init__(self, config_handler:ConfigReader,logging_manager:LoggingManager)->None:
         """
         Initialize the Data_Processing class with configuration settings.
         
@@ -22,7 +22,7 @@ class Data_Processing():
             None: Initializes the Data_Processing object
         """
         self.config_handler=config_handler
-
+        self.logging_manager=logging_manager
         # list objects that are created during pre processing
         self.times_list_train=[]
         self.feature_list_train=[]
@@ -100,12 +100,12 @@ class Data_Processing():
 
         # load saved data
         if self.config_handler.get_config_status("data_processing.saving_loading.load_data"):
-            print("Loading data...")
+            self.logging_manager.log("Loading data...")
             self.load_data()
 
         # prepare data and save it
         else:
-            print("Preprocessing data...")
+            self.logging_manager.log("Preprocessing data...")
             # prepare training data
             self.prepare_training_data_lists()
             
@@ -121,11 +121,11 @@ class Data_Processing():
             # but has to be assimilated into a single array for training
             self.construct_masks_training_data()
             self.construct_masks_testing_data()
-            print("Data preprocessing complete")
+            self.logging_manager.log("Data preprocessing complete")
             # save data
             if self.config_handler.get_config_status("data_processing.saving_loading.save_data"):
                 self.save_data()
-                print("Data saved to disk")
+                self.logging_manager.log("Data saved to disk")
         
         # divide loaded data into batches
         self.divide_data_into_batches()
@@ -170,7 +170,7 @@ class Data_Processing():
                 self.std_vals_inp=std_vals_inp
                 self.mean_vals_out=mean_vals_out
                 self.std_vals_out=std_vals_out
-                print("Warning: using only the first trajectory to get standard score normalization parameters")
+                self.logging_manager.log("Warning: using only the first trajectory to get standard score normalization parameters")
                 self.end_time=time_data[-1]
                 self.num_inputs=feature_data.shape[0]
                 self.latent_scaling=np.ones(int(self.config_handler.get_config_status("data_processing.latent_space_dim")))
@@ -660,7 +660,8 @@ class Data_Processing():
         mlflow.log_artifact(os.path.join(data_dir, 'training_data.h5'), "training_data")
         mlflow.log_artifact(os.path.join(data_dir, 'testing_data.h5'), "testing_data")
 
-        print(f"Data saved to {data_dir}/")
+        self.logging_manager.log(f"Data saved to {data_dir}/")
+
 
     def sample_training_data(self,)->dict[str,np.ndarray]:
         """
@@ -733,7 +734,7 @@ class Data_Processing():
         mlflow.log_artifact(os.path.join(data_dir, 'training_data.h5'), "training_data")
         mlflow.log_artifact(os.path.join(data_dir, 'testing_data.h5'), "testing_data")
 
-        print(f"Data loaded from {data_dir}/")
+        self.logging_manager.log(f"Data loaded from {data_dir}/")
     
     def _place_on_device(self,data):
         """Place numpy array on GPU device and convert to JAX array"""

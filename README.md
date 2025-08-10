@@ -33,6 +33,9 @@ TODO:
 Further GPU optimization
     - Setup prefetch
 L-BFGS training
+tests
+equinox based models
+try other data
 
 Tips:
 

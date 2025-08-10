@@ -1,8 +1,8 @@
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from src.lib.NODE.classes import Neural_ODE
-from src.utils.classes import ConfigReader
-from src.utils.helper_functions import log_to_mlflow
+from src.utils.classes import ConfigReader,LoggingManager
+from src.utils.helper_functions import log_to_mlflow,log_to_mlflow_artifacts
 import os
 import jax
 from pathlib import Path
@@ -19,6 +19,9 @@ if __name__=="__main__":
 
     config_handler=ConfigReader(str(config_path))
 
+    logging_manager=LoggingManager()
+    logging_manager.log("Config file read")
+
     # set up mlflow
 
     with mlflow.start_run():
@@ -31,11 +34,14 @@ if __name__=="__main__":
         log_to_mlflow(config_handler.config_status,str(config_path))
 
         # set up data processing
-        data_processing_handler=Data_Processing(config_handler)
+        data_processing_handler=Data_Processing(config_handler,logging_manager)
 
         # encoder-decoder
-        encoder_decoder_handler=Encoder_Decoder(config_handler,data_processing_handler)
+        encoder_decoder_handler=Encoder_Decoder(config_handler,logging_manager,data_processing_handler)
 
         # neural ode
-        neural_ode_handler=Neural_ODE(config_handler,data_processing_handler,encoder_decoder_handler)
+        neural_ode_handler=Neural_ODE(config_handler,logging_manager,data_processing_handler,encoder_decoder_handler)
 
+        logging_manager.log("Training complete")
+        log_to_mlflow_artifacts(logging_manager.log_filename,"log_filename")
+        mlflow.end_run()

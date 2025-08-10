@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import jax
 import optax
 import numpy as np
-from src.utils.classes import ConfigReader,MLP
+from src.utils.classes import ConfigReader,MLP,LoggingManager
 from src.utils.helper_functions import _forward_pass,log_to_mlflow_metrics,log_to_mlflow_artifacts
 from src.lib.data_processing.classes import Data_Processing
 from pathlib import Path
@@ -67,10 +67,10 @@ def _loss_fn_autoencoder(constants,networks,data_dict):
 
 class Encoder_Decoder():
 
-    def __init__(self,config_handler:ConfigReader,data_processing_handler:Data_Processing)->None:
+    def __init__(self,config_handler:ConfigReader,logging_manager:LoggingManager,data_processing_handler:Data_Processing)->None:
 
         self.config_handler=config_handler # constants that do not change during training
-
+        self.logging_manager=logging_manager
         self.data_processing_handler=data_processing_handler
 
         self.training_loss_values=[]
@@ -84,10 +84,10 @@ class Encoder_Decoder():
 
         # load model if specified
         if self.config_handler.get_config_status("encoder_decoder.loading.load_model"):
-            print("Loading encoder and decoder weights")
+            self.logging_manager.log("Loading encoder and decoder weights")
             self._load_enc_dec()
         else:
-            print("Initializing encoder and decoder weights, and training encoder and decoder")
+            self.logging_manager.log("Initializing encoder and decoder weights, and training encoder and decoder")
             # initialize model
             self._init_enc_dec()
 
@@ -97,17 +97,17 @@ class Encoder_Decoder():
             # test model using test
 
             if self.config_handler.get_config_status("encoder_decoder.loading.save_model"):
-                print("Saving encoder and decoder weights")
+                self.logging_manager.log("Saving encoder and decoder weights")
                 self.save_enc_dec()
 
         # test loaded model
         if self.config_handler.get_config_status("encoder_decoder.testing.test_model"):
-            print("Testing loaded encoder and decoder weights")
+            self.logging_manager.log("Testing loaded encoder and decoder weights")
             error=self.test_error_compute(self.encoder_object.weights,self.decoder_object.weights,save_results=True)
-            print(f"Test error: {error}")
+            self.logging_manager.log(f"Test error: {error}")
 
             if self.config_handler.get_config_status("encoder_decoder.testing.visualization.plot_results"):
-                print("Visualizing results")
+                self.logging_manager.log("Visualizing results")
                 self.visualize_results()
 
     def check_save_load_dirs(self):
@@ -191,12 +191,12 @@ class Encoder_Decoder():
             
             if i_step%self.print_freq==0 and i_step>0:
                 t2=time.time()
-                print(f"Time taken for {self.print_freq} training steps: {t2-t1} seconds")
+                self.logging_manager.log(f"Time taken for {self.print_freq} training steps: {t2-t1} seconds")
                 t1=time.time()
 
-        print("Training complete")
+        self.logging_manager.log("Training complete")
         
-        print(f"Best test loss: {self.best_test_loss}")
+        self.logging_manager.log(f"Best test loss: {self.best_test_loss}")
 
 
     def _train_step(self,opt_state,train_step):
@@ -227,13 +227,13 @@ class Encoder_Decoder():
             self.test_loss_values.append(error)
             self.training_loss_values.append(value)
 
-            print(f"Iteration number: {train_step}, loss: {value}, test error: {error}, best test loss: {self.best_test_loss}")
+            self.logging_manager.log(f"Iteration number: {train_step}, loss: {value}, test error: {error}, best test loss: {self.best_test_loss}")
         
             # log to mlflow
             log_to_mlflow_metrics({'enc_dec_training_loss':value,'enc_dec_test_loss':error},train_step)
 
             if  True:#error<self.best_test_loss:
-                print(f"New best test loss: {error}, recording weights")
+                self.logging_manager.log(f"New best test loss: {error}, recording weights")
                 self.best_test_loss=error
                 self.encoder_object.weights=self.trainable_variables['encoder']
                 self.decoder_object.weights=self.trainable_variables['decoder']
@@ -268,8 +268,8 @@ class Encoder_Decoder():
         #---------------------------------------------------------------
         if save_results:
             # get some constants for predictions
-            prediction_lists={'specie_list_test':[],'temps_list_test':[],'time_data_test':[]}
-            true_lists={'specie_list_test':[],'temps_list_test':[],'time_data_test':[]}
+            prediction_lists={'feature_list_test':[],'time_data_test':[]}
+            true_lists={'feature_list_test':[],'time_data_test':[]}
             
             num_test_traj=self.test_constants['num_test_traj']
             num_inputs=self.test_constants['num_inputs']
@@ -279,16 +279,14 @@ class Encoder_Decoder():
             input_data=input_data*std_vals_inp+mean_vals_inp
             input_preds=input_preds*std_vals_inp+mean_vals_inp
 
-            print("Writing out results of autoencoder training to pickle file...")
+            self.logging_manager.log("Writing out results of autoencoder training to pickle file...")
 
             # save predictions and true values
             for i_traj in range(num_test_traj):
-                prediction_lists['specie_list_test'].append(input_preds[i_traj,:num_timesteps_each_traj_test[i_traj],:-1])
-                prediction_lists['temps_list_test'].append(input_preds[i_traj,:num_timesteps_each_traj_test[i_traj],num_inputs-1])
+                prediction_lists['feature_list_test'].append(input_preds[i_traj,:num_timesteps_each_traj_test[i_traj],:])
                 prediction_lists['time_data_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
                 
-                true_lists['specie_list_test'].append(input_data[i_traj,:num_timesteps_each_traj_test[i_traj],:-1])
-                true_lists['temps_list_test'].append(input_data[i_traj,:num_timesteps_each_traj_test[i_traj],num_inputs-1])
+                true_lists['feature_list_test'].append(input_data[i_traj,:num_timesteps_each_traj_test[i_traj],:])
                 true_lists['time_data_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
 
             with open(enc_dec_res_dir/Path('predictions.pkl'),'wb') as f:
@@ -325,22 +323,22 @@ class Encoder_Decoder():
 
         viz_dir=Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.testing.visualization.save_dir"))
         if os.path.isdir(viz_dir):
-            print(f"Removing existing visualization directory: {viz_dir}")
+            self.logging_manager.log(f"Removing existing visualization directory: {viz_dir}")
             shutil.rmtree(viz_dir)
 
         os.mkdir(viz_dir)
 
         # loop over saved trajectories and return comparison plots for each species and temperature
-        for i_traj in range(len(prediction_lists['specie_list_test'])):
+        for i_traj in range(len(prediction_lists['feature_list_test'])):
             i_traj_viz_dir=viz_dir/Path(f"traj_{i_traj}")
             os.mkdir(i_traj_viz_dir)
             num_inputs=self.test_constants['num_inputs']
 
-            for i_input in range(num_inputs-1):
+            for i_input in range(num_inputs):
                 plt.plot(prediction_lists['time_data_test'][i_traj],
-                         prediction_lists['specie_list_test'][i_traj][:,i_input],label='predicted')
+                         prediction_lists['feature_list_test'][i_traj][:,i_input],label='predicted')
                 plt.plot(true_lists['time_data_test'][i_traj],
-                         true_lists['specie_list_test'][i_traj][:,i_input],label='true')
+                         true_lists['feature_list_test'][i_traj][:,i_input],label='true')
                 plt.legend()
                 plt.grid()
                 plt.xlabel('Independent Variable')
@@ -352,18 +350,6 @@ class Encoder_Decoder():
                     plt.yscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['yscale'])
                 plt.savefig(i_traj_viz_dir/Path(f"input_{i_input}.png"))
                 plt.close()
-            
-            plt.plot(prediction_lists['time_data_test'][i_traj],
-                     prediction_lists['temps_list_test'][i_traj],label='predicted')
-            plt.plot(true_lists['time_data_test'][i_traj],
-                     true_lists['temps_list_test'][i_traj],label='true')
-            
-            if 'xscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
-                plt.xscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['xscale'])
-            if 'yscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
-                plt.yscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['yscale'])
-            plt.savefig(i_traj_viz_dir/Path(f"input_{num_inputs-1}.png"))
-            plt.close()
         
         # log to mlflow
         log_to_mlflow_artifacts(viz_dir,"visualization_test_enc_dec")

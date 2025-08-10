@@ -8,7 +8,7 @@ from functools import partial
 import pickle
 import os
 from src.utils.helper_functions import _forward_pass,log_to_mlflow_artifacts,log_to_mlflow_metrics
-from src.utils.classes import ConfigReader,MLP
+from src.utils.classes import ConfigReader,MLP,LoggingManager
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from diffrax import RESULTS
@@ -137,13 +137,13 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
 
 class Neural_ODE():
 
-    def __init__(self,config_handler:ConfigReader,data_processing_handler:Data_Processing,encoder_decoder_handler:Encoder_Decoder):
+    def __init__(self,config_handler:ConfigReader,logging_manager:LoggingManager,data_processing_handler:Data_Processing,encoder_decoder_handler:Encoder_Decoder):
 
         # init
         self.config_handler=config_handler
         self.data_processing_handler=data_processing_handler
         self.encoder_decoder_handler=encoder_decoder_handler
-
+        self.logging_manager=logging_manager
         # get training constants
         self.constants=self.data_processing_handler.get_training_constants()
 
@@ -196,12 +196,12 @@ class Neural_ODE():
 
         # test loaded model
         if self.config_handler.get_config_status("neural_ode.testing.test_model"):
-            print("Getting predictions for test data")
+            self.logging_manager.log("Getting predictions for test data")
             self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
 
             # visualize results
             if self.config_handler.get_config_status("neural_ode.testing.visualization.plot_results"):
-                print("Visualizing results")
+                self.logging_manager.log("Visualizing results")
                 self.visualize_results()
 
     def check_save_load_dirs(self):
@@ -251,7 +251,7 @@ class Neural_ODE():
 
     def _train_NODE(self):
 
-        print("Training NODE...")
+        self.logging_manager.log("Training NODE...")
         self.training_loss_values=[]
         self.test_loss_values=[]
 
@@ -278,11 +278,11 @@ class Neural_ODE():
             #rand_index=randrange(num_traj)
             opt_state,success=self._train_step(opt_state,i_step)
             if success==0:
-                print("Integration failed, stopping training.")
+                self.logging_manager.log("Integration failed, stopping training.")
                 break
             if i_step % self.print_freq == 0:
                 t2=time.time()
-                print(f"Training time for {self.print_freq} steps: {t2-t1} seconds")
+                self.logging_manager.log(f"Training time for {self.print_freq} steps: {t2-t1} seconds")
                 t1=time.time()
 
     def _train_step(self,opt_state,train_step):
@@ -322,7 +322,7 @@ class Neural_ODE():
         if train_step % self.print_freq==0:
             #self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
             if value>1E5/num_traj:
-                print("Loss is too high, skipping update. This indicates failure to integrate.")
+                self.logging_manager.log("Loss is too high, skipping update. This indicates failure to integrate.")
                 success=0
                 return opt_state,success
 
@@ -334,11 +334,11 @@ class Neural_ODE():
             if value < self.best_training_loss:
                 self.best_training_loss=value
 
-            print(f"Step: {train_step}, training loss: {value}, test loss: {test_loss}, best training loss: {self.best_training_loss}, best test loss: {self.best_test_loss}")
+            self.logging_manager.log(f"Step: {train_step}, training loss: {value}, test loss: {test_loss}, best training loss: {self.best_training_loss}, best test loss: {self.best_test_loss}")
 
             if test_loss < self.best_test_loss:
                 self.best_test_loss=test_loss
-                print(f"New best test loss: {test_loss}, recording weights")
+                self.logging_manager.log(f"New best test loss: {test_loss}, recording weights")
                 self.NODE_object.weights=self.trainable_variables_NODE['NODE']
                 #self.encoder_decoder_handler.encoder_object.weights=self.trainable_variables_NODE['encoder']
                 #self.encoder_decoder_handler.decoder_object.weights=self.trainable_variables_NODE['decoder']
@@ -388,12 +388,12 @@ class Neural_ODE():
         std_vals_inp=self.test_constants['std_vals_inp'].reshape(1,-1)
 
         for i_traj in range(num_test_traj):
-            print(f"Predicting trajectory {i_traj+1} of {num_test_traj}")
+            self.logging_manager.log(f"Predicting trajectory {i_traj+1} of {num_test_traj}")
             solution=_integrate_NODE(self.test_constants,node_weights_dict,enc_dec_weights,self.test_data_dict,i_traj) 
 
             # check if integration failed
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:
-                print(f"Integration failed for trajectory {i_traj+1} of {num_test_traj}")
+                self.logging_manager.log(f"Integration failed for trajectory {i_traj+1} of {num_test_traj}")
                 
             latent_space_pred=jnp.squeeze(solution.ys)
             phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
@@ -461,7 +461,7 @@ class Neural_ODE():
 
         viz_dir=Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path(self.config_handler.get_config_status("neural_ode.testing.visualization.save_dir"))
         if os.path.isdir(viz_dir):
-            print(f"Removing existing visualization directory: {viz_dir}")
+            self.logging_manager.log(f"Removing existing visualization directory: {viz_dir}")
             shutil.rmtree(viz_dir)
 
         os.mkdir(viz_dir)
