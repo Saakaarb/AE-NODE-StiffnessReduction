@@ -128,7 +128,7 @@ class Encoder_Decoder():
             
             self.optimizer=optax.adam(self.learning_rate)
         elif self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="l-bfgs":
-            pass
+            self.optimizer=optax.lbfgs()
         
         else:
             raise NotImplementedError(f"Optimizer {self.config_handler.get_config_status('encoder_decoder.training.optimizer')} not implemented")
@@ -208,7 +208,12 @@ class Encoder_Decoder():
         value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_variables,data_dict)
             
         #compute update to trainable variable
-        updates,opt_state=self.optimizer.update(grad_loss,opt_state)
+        if self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="adam":
+            updates,opt_state=self.optimizer.update(grad_loss,opt_state)
+        elif self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="l-bfgs":
+            def loss_wrapper(trainable_vars):
+                return self.loss_fn(self.training_constants, trainable_vars, data_dict)
+            updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
 
         # get new value for trainable variable
         results=optax.apply_updates(self.trainable_variables,updates)
