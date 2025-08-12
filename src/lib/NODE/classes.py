@@ -44,8 +44,8 @@ def _ode_fn(t,state,other_args):
     #jax.debug.print("i_traj: {z}, t:{y} derivatives:{x}",z=i_traj,y=t,x=derivatives)
     return jnp.squeeze(derivatives)
 
-@jax.jit
-def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj):
+@partial(jax.jit,static_argnums=(5,))
+def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj,max_traj_size):
 
     start_end_time_data=data_dict['start_end_time_data']
     initial_condition_data=data_dict['initial_condition_data']
@@ -70,8 +70,12 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     y_latent_init = jnp.squeeze(_forward_pass(phys_space_init,enc_dec_weights['encoder']))
 
     curr_time_data=time_data[i_traj,:]
+    #jax.debug.print("curr_time_data: {x}",x=curr_time_data)
+    #jax.debug.print("curr time data shape: {x}",x=curr_time_data.shape)
 
-    saveat = diffrax.SaveAt(ts=curr_time_data)
+    #saveat = diffrax.SaveAt(ts=curr_time_data)
+    saveat = diffrax.SaveAt(t0=True,t1=True,steps=True)
+    stepsize_controller=diffrax.StepTo(ts=curr_time_data)
 
     term = diffrax.ODETerm(_ode_fn)
     #rtol=jnp.array([1E-2,1E-3])
@@ -84,9 +88,15 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     #solution = diffrax.diffeqsolve(term,diffrax.Euler(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
     #                                max_steps=16384)
-    solution = diffrax.diffeqsolve(term,diffrax.Tsit5(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
-                                    saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=True,
-                                    max_steps=16384)
+
+    #solution = diffrax.diffeqsolve(term,diffrax.Tsit5(),t0=t_init,t1=t_final,dt0=init_dt,y0=y_latent_init,
+    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=True,
+    #                                max_steps=600)
+
+    solution = diffrax.diffeqsolve(term,diffrax.Heun(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
+                                    saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
+                                    max_steps=max_traj_size-1,stepsize_controller=stepsize_controller)
+    #jax.debug.print("solution.ts: {x}, curr_time_data: {y}, solution_time_shape: {z}, curr_time_data_shape: {w}",x=solution.ts,y=curr_time_data,z=solution.ts.shape,w=curr_time_data.shape)
 
     #solution = diffrax.diffeqsolve(term,diffrax.Kvaerno5(),t0=t_init,t1=t_final,dt0 = 1e-11,y0=y_latent_init,
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
@@ -95,13 +105,14 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     return solution
 
 
-@partial(jax.jit,static_argnums=(4,))
-def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj):
+@partial(jax.jit,static_argnums=(4,5,))
+def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size):
     
     # masks
     recon_mask=data_dict['recon_mask']
     latent_space_mask=data_dict['latent_space_mask']
     input_data=data_dict['input_data']
+    
     
     # Create a vectorized version of the single-trajectory loss computation
     def single_trajectory_loss(i_traj):
@@ -109,24 +120,35 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
         latent_space_mask_curr=latent_space_mask[i_traj,:,:]
         phys_data=input_data[i_traj,:,:]
 
-        solution=_integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj)
+        solution=_integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj,max_traj_size)
 
         failed = jnp.logical_or(solution.result == RESULTS.max_steps_reached, solution.result==RESULTS.singular)
 
         # predicted output in latent space
         latent_space_pred=jnp.squeeze(solution.ys)
 
+        #jax.debug.print("solution time: {x}",x=solution.ts)
         # prediction after integration
         phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
-        
+        #jax.debug.print("phys_space_pred_int: {x}",x=phys_space_pred_int)
+        #jax.debug.print("phys_data: {x}",x=phys_data)
+        #jax.debug.print("recon_mask_curr: {x}",x=recon_mask_curr)
+
+        #jax.debug.print("loss_L1: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
         loss_L1=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
+        #loss_L1=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr))))
 
         # latent space truth
         latent_space_truth=_forward_pass(phys_data,enc_dec_weights['encoder'])
+        #jax.debug.print("latent_space_pred: {x}",x=latent_space_pred)
+        #jax.debug.print("latent_space_truth: {x}",x=latent_space_truth)
+        #jax.debug.print("latent_space_mask_curr: {x}",x=latent_space_mask_curr)
 
+        #jax.debug.print("loss_L3: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
         loss_L3=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
-        
-        return loss_L1, loss_L3, jnp.where(failed, 0.0, 1.0)
+        loss_L3=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr))))
+
+        return loss_L1, loss_L3, 1.0
 
     # Vectorize over all trajectories
     losses_L1, losses_L3, loss_comp_success = jax.vmap(single_trajectory_loss)(jnp.arange(num_traj))
@@ -318,7 +340,7 @@ class Neural_ODE():
         #    value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=(1,2),allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights)
 
         #else:
-        value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights,data_dict,num_traj)
+        value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights,data_dict,num_traj,self.constants['max_train_traj_size'])
 
         
         #if self.trainable_enc_dec:
@@ -330,7 +352,7 @@ class Neural_ODE():
             updates,opt_state=self.optimizer.update(grad_loss,opt_state)
         elif self.config_handler.get_config_status("neural_ode.training.optimizer")=="l-bfgs":
             def loss_wrapper(trainable_vars):
-                return self.loss_fn(self.constants, trainable_vars, self.enc_dec_weights, data_dict, num_traj)
+                return self.loss_fn(self.constants, trainable_vars, self.enc_dec_weights, data_dict, num_traj,self.constants['max_train_traj_size'])
             updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables_NODE,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
 
         # get new value for trainable variable
@@ -351,7 +373,7 @@ class Neural_ODE():
                 return opt_state,success
 
 
-            test_loss=self.loss_fn(self.test_constants,self.trainable_variables_NODE,self.enc_dec_weights,self.test_data_dict,self.test_constants['num_test_traj'])
+            test_loss=self.loss_fn(self.test_constants,self.trainable_variables_NODE,self.enc_dec_weights,self.test_data_dict,self.test_constants['num_test_traj'],self.test_constants['max_test_traj_size'])
 
             self.training_loss_values.append(value)
             self.test_loss_values.append(test_loss)
@@ -376,9 +398,9 @@ class Neural_ODE():
         return opt_state,success
 
 
-    def loss_fn(self,constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj):
-
-        return _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj)
+    def loss_fn(self,constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size):
+        max_traj_size=int(max_traj_size)
+        return _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size)
 
     # predict solution trajectories
     def test_NODE_model(self,enc_weights,dec_weights,NODE_weights):
@@ -410,10 +432,11 @@ class Neural_ODE():
         # make shape (1,num_inputs) since each trajectory is computed separately
         mean_vals_inp=self.test_constants['mean_vals_inp'].reshape(1,-1)
         std_vals_inp=self.test_constants['std_vals_inp'].reshape(1,-1)
+        max_traj_size=self.test_constants['max_test_traj_size']
 
         for i_traj in range(num_test_traj):
             self.logging_manager.log(f"Predicting trajectory {i_traj+1} of {num_test_traj}")
-            solution=_integrate_NODE(self.test_constants,node_weights_dict,enc_dec_weights,self.test_data_dict,i_traj) 
+            solution=_integrate_NODE(self.test_constants,node_weights_dict,enc_dec_weights,self.test_data_dict,i_traj,max_traj_size) 
 
             # check if integration failed
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:

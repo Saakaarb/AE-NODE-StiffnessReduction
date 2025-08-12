@@ -82,7 +82,7 @@ neural_ode:
         learning_rate_decay_steps: 1000
 
         # batch processing
-        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 10000
+        num_training_iters: 1000 # for l-bfgs use max 200 steps, for adam use 10000
         
         print_freq: 1
 
@@ -97,7 +97,7 @@ neural_ode:
         atol: 1e-1 # absolute tolerance
         dtmin: None
         #---------------------------------
-        init_dt: 1E-5 # explicit euler integration timestep; make sure this is small enough to capture
+        init_dt: 5E-5 # explicit euler integration timestep; make sure this is small enough to capture
                         # the smallest timescale in the system
 
     testing:
