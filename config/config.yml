@@ -3,15 +3,15 @@ data_processing:
     saving_loading:
         load_data: True # True/False
         save_data: True # True/False
-        raw_data_path: "smaller_script_data"
+        raw_data_path: "mild_combustion_solutions"
         processed_data_path: "processed_data"
 
     # data processing information
     train_split_ratio: 0.95
     check_raw_data_shape: True
-    total_available_features: 7 # the total number of features in the data. This does NOT include time,
+    total_available_features: 5 # the total number of features in the data. This does NOT include time,
                                 # assumed to be the first row/column (at index 0)
-    feature_train_index: [1,2,3,4,5,7] #the row/column indices (0 indexed) from the dataset of which species should be in the training set
+    feature_train_index: [1,2,3,4,5] #the row/column indices (0 indexed) from the dataset of which species should be in the training set
                                         # DO NOT include 0 (assumed to be time); this will raise an error
     data_arrange_mode: 'row_major' # each datapoint is a row in the data files
     latent_space_dim: 2
@@ -32,16 +32,16 @@ encoder_decoder:
     training:
 
         # Optimizer and learning rate
-        optimizer: 'adam'
+        optimizer: 'adam' # 'adam' or 'l-bfgs'
         start_learning_rate: 0.001 
         end_learning_rate: 0.00001
         learning_rate_decay: 0.9
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 30000
+        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 30000
         
-        print_freq: 100
+        print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
         # experimental settings
         stiffness_reduction: True # yes/no
@@ -75,27 +75,29 @@ neural_ode:
     training:
        
         # Optimizer and learning rate
-        optimizer: 'l-bfgs' # 'adam' or 'l-bfgs'
+        optimizer: 'adam' # 'adam' or 'l-bfgs'
         start_learning_rate: 0.001
         end_learning_rate: 0.0001
         learning_rate_decay: 0.9
         learning_rate_decay_steps: 1000
 
         # batch processing
-        num_training_iters: 100 # for l-bfgs use max 200 steps, for adam use 10000
+        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 10000
         
         print_freq: 1
 
         simultaneous_training: False # True/False
 
     ode_solver:
-        
+        # currently deprecated
+        #---------------------------------
         pcoeff: 0.3 # predictor coefficient
         icoeff: 0.4 # corrector coefficient
         rtol: 1e-1 # relative tolerance
         atol: 1e-1 # absolute tolerance
         dtmin: None
-        init_dt: 1E-11 # explicit euler integration timestep; make sure this is small enough to capture
+        #---------------------------------
+        init_dt: 1E-5 # explicit euler integration timestep; make sure this is small enough to capture
                         # the smallest timescale in the system
 
     testing:
