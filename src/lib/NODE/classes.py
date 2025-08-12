@@ -18,7 +18,7 @@ import time
 import shutil
 
 
-jax.config.update("jax_enable_x64", True)
+#jax.config.update("jax_enable_x64", True)
 
 
 ##########################################################
@@ -81,10 +81,13 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
     #                                max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=pcoeff,icoeff=icoeff,rtol=rtol, atol=atol,dtmin=dtmin))
     
-    solution = diffrax.diffeqsolve(term,diffrax.Euler(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
+    #solution = diffrax.diffeqsolve(term,diffrax.Euler(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
+    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
+    #                                max_steps=16384)
+    solution = diffrax.diffeqsolve(term,diffrax.Tsit5(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
                                     max_steps=16384)
-   
+
     #solution = diffrax.diffeqsolve(term,diffrax.Kvaerno5(),t0=t_init,t1=t_final,dt0 = 1e-11,y0=y_latent_init,
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
     #                                max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=0.3,icoeff=0.4,rtol=1e-6, atol=1e-8,dtmin=None))
@@ -154,8 +157,23 @@ class Neural_ODE():
         # update neural ODE specs in dict
         node_spec_dict={'pcoeff':float(self.config_handler.get_config_status("neural_ode.ode_solver.pcoeff")),
                         'icoeff':float(self.config_handler.get_config_status("neural_ode.ode_solver.icoeff")),
-                        'rtol':float(self.config_handler.get_config_status("neural_ode.ode_solver.rtol")),
-                        'atol':float(self.config_handler.get_config_status("neural_ode.ode_solver.atol"))}
+                        }
+        rtol_vals=self.config_handler.get_config_status("neural_ode.ode_solver.rtol")
+        atol_vals=self.config_handler.get_config_status("neural_ode.ode_solver.atol")
+        if isinstance(rtol_vals,list):
+            assert len(rtol_vals)==self.config_handler.get_config_status("data_processing.latent_space_dim"),"rtol list must be same length as latent space dim"
+            node_spec_dict['rtol']=rtol_vals
+        else:
+            node_spec_dict['rtol']=float(rtol_vals)
+
+        if isinstance(atol_vals,list):
+            assert len(atol_vals)==self.config_handler.get_config_status("data_processing.latent_space_dim"),"atol list must be same length as latent space dim"
+            node_spec_dict['atol']=atol_vals
+        else:
+            node_spec_dict['atol']=float(atol_vals)
+
+        #'rtol':float(self.config_handler.get_config_status("neural_ode.ode_solver.rtol"))
+        #'atol':float(self.config_handler.get_config_status("neural_ode.ode_solver.atol"))
         # update self.constant with ode solver specs
 
         if self.config_handler.get_config_status("neural_ode.ode_solver.init_dt") == "None":    
@@ -225,7 +243,8 @@ class Neural_ODE():
                                                     decay_rate=self.lr_decay_rate,end_value=self.lr_end_value)
             self.optimizer=optax.adam(self.learning_rate)
 
-        # TODO add BFGS
+        elif self.config_handler.get_config_status("neural_ode.training.optimizer")=="l-bfgs":
+            self.optimizer=optax.lbfgs()    
 
     def _init_network(self):
 
@@ -307,7 +326,12 @@ class Neural_ODE():
 
 
         #compute update to trainable variable
-        updates,opt_state=self.optimizer.update(grad_loss,opt_state)
+        if self.config_handler.get_config_status("neural_ode.training.optimizer")=="adam":
+            updates,opt_state=self.optimizer.update(grad_loss,opt_state)
+        elif self.config_handler.get_config_status("neural_ode.training.optimizer")=="l-bfgs":
+            def loss_wrapper(trainable_vars):
+                return self.loss_fn(self.constants, trainable_vars, self.enc_dec_weights, data_dict, num_traj)
+            updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables_NODE,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
 
         # get new value for trainable variable
         results=optax.apply_updates(self.trainable_variables_NODE,updates)

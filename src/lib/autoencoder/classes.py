@@ -268,7 +268,7 @@ class Encoder_Decoder():
         #---------------------------------------------------------------
         if save_results:
             # get some constants for predictions
-            prediction_lists={'feature_list_test':[],'time_data_test':[]}
+            prediction_lists={'feature_list_test':[],'time_data_test':[],'latent_space_test':[]}
             true_lists={'feature_list_test':[],'time_data_test':[]}
             
             num_test_traj=self.test_constants['num_test_traj']
@@ -285,7 +285,8 @@ class Encoder_Decoder():
             for i_traj in range(num_test_traj):
                 prediction_lists['feature_list_test'].append(input_preds[i_traj,:num_timesteps_each_traj_test[i_traj],:])
                 prediction_lists['time_data_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
-                
+                prediction_lists['latent_space_test'].append(latent_space_preds[i_traj,:num_timesteps_each_traj_test[i_traj],:])
+
                 true_lists['feature_list_test'].append(input_data[i_traj,:num_timesteps_each_traj_test[i_traj],:])
                 true_lists['time_data_test'].append(self.test_data_dict['time_data'][i_traj][:num_timesteps_each_traj_test[i_traj]])
 
@@ -351,5 +352,21 @@ class Encoder_Decoder():
                 plt.savefig(i_traj_viz_dir/Path(f"input_{i_input}.png"))
                 plt.close()
         
+            if self.config_handler.get_config_status("encoder_decoder.testing.visualization.plot_latent_space"):
+                for i_dim in range(self.config_handler.get_config_status("data_processing.latent_space_dim")):
+                    plt.plot(prediction_lists['time_data_test'][i_traj],
+                            prediction_lists['latent_space_test'][i_traj][:,i_dim],label='predicted')
+                    plt.legend()
+                    plt.grid()
+                    plt.xlabel('Independent Variable')
+                    plt.ylabel('Latent Space')
+                    plt.title(f'Latent Space Dimension {i_dim}')
+                    if 'xscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
+                        plt.xscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['xscale'])
+                    if 'yscale' in self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings").keys():
+                        plt.yscale(self.config_handler.get_config_status("encoder_decoder.testing.visualization.settings")['yscale'])
+                    plt.savefig(i_traj_viz_dir/Path(f"latent_space_{i_dim}.png"))
+                    plt.close()
+
         # log to mlflow
         log_to_mlflow_artifacts(viz_dir,"visualization_test_enc_dec")
