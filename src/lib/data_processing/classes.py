@@ -175,6 +175,7 @@ class Data_Processing():
                 self.num_inputs=feature_data.shape[0]
                 self.latent_scaling=np.ones(int(self.config_handler.get_config_status("data_processing.latent_space_dim")))
                 # inferred from data
+                
                 self.config_handler.set_config_status("data_processing.num_inputs",self.num_inputs)
             else:
                 if time_data[-1]!=self.end_time:
