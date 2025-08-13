@@ -40,6 +40,7 @@ def _ode_fn(t,state,other_args):
     # scaling trick derived from 
     #Stiff Neural Ordinary Differential Equations, Kim, Ji et al
     #https://arxiv.org/pdf/2103.15341
+    #jax.debug.print("input: {x}, scaled input: {y}",x=state,y=jnp.divide(state,scaling))
     derivatives=jnp.squeeze(_forward_pass(jnp.divide(state,scaling),trainable_variables_NODE['NODE']))*(1.0/constants['end_time']) # scaling included
     #jax.debug.print("i_traj: {z}, t:{y} derivatives:{x}",z=i_traj,y=t,x=derivatives)
     return jnp.squeeze(derivatives)
@@ -136,6 +137,7 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
 
         #jax.debug.print("loss_L1: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
         loss_L1=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
+        #jax.debug.print("phys_space_pred_int: {x}, phys_data: {y}, recon_mask_curr: {z}",x=phys_space_pred_int,y=phys_data,z=recon_mask_curr)
         #loss_L1=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr))))
 
         # latent space truth
@@ -146,9 +148,9 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
 
         #jax.debug.print("loss_L3: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
         loss_L3=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
-        loss_L3=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr))))
+        #loss_L3=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr))))
 
-        return loss_L1, loss_L3, 1.0
+        return loss_L1, loss_L3, jnp.where(failed,0.0,1.0)
 
     # Vectorize over all trajectories
     losses_L1, losses_L3, loss_comp_success = jax.vmap(single_trajectory_loss)(jnp.arange(num_traj))
@@ -156,9 +158,10 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
     # Sum up the losses
     loss_l1 = jnp.sum(losses_L1)
     loss_l3 = jnp.sum(losses_L3)
+    
     total_success = jnp.sum(loss_comp_success)
-
-    return (loss_l1 + loss_l3) / total_success
+    #jax.debug.print("loss_L1: {x}, loss_L3: {y}",x=loss_l1/total_success,y=loss_l3/total_success)
+    return (loss_l1 + loss_l3) / (total_success)
 
 class Neural_ODE():
 
