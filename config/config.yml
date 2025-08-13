@@ -69,22 +69,22 @@ neural_ode:
 
     architecture:
         network_type: 'mlp'
-        network_width: 64
+        network_width: 128
         num_layers: 2
 
     training:
        
         # Optimizer and learning rate
         optimizer: 'adam' # 'adam' or 'l-bfgs'
-        start_learning_rate: 0.001
-        end_learning_rate: 0.0001
-        learning_rate_decay: 0.9
+        start_learning_rate: 0.01
+        end_learning_rate: 0.001
+        learning_rate_decay: 0.7
         learning_rate_decay_steps: 1000
 
         # batch processing
-        num_training_iters: 1000 # for l-bfgs use max 200 steps, for adam use 10000
+        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 10000
         
-        print_freq: 1
+        print_freq: 100
 
         simultaneous_training: False # True/False
 

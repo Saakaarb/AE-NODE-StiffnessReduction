@@ -165,12 +165,12 @@ class Data_Processing():
 
             # get (approx) standard score normalization parameters
             if i_traj==0:
-                mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out=standard_score_norm(time_data,feature_data)
-                self.mean_vals_inp=mean_vals_inp
-                self.std_vals_inp=std_vals_inp
-                self.mean_vals_out=mean_vals_out
-                self.std_vals_out=std_vals_out
-                self.logging_manager.log("Warning: using only the first trajectory to get standard score normalization parameters")
+                #mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out=standard_score_norm(feature_data)
+                #self.mean_vals_inp=mean_vals_inp
+                #self.std_vals_inp=std_vals_inp
+                #self.mean_vals_out=mean_vals_out
+                #self.std_vals_out=std_vals_out
+                #self.logging_manager.log("Warning: using only the first trajectory to get standard score normalization parameters")
                 self.end_time=time_data[-1]
                 self.num_inputs=feature_data.shape[0]
                 self.latent_scaling=np.ones(int(self.config_handler.get_config_status("data_processing.latent_space_dim")))
@@ -183,11 +183,42 @@ class Data_Processing():
                 if feature_data.shape[0]!=self.num_inputs:
                     raise ValueError("Number of inputs is not the same for all trajectories!")
 
-            network_input=(feature_data-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
+            #network_input=(feature_data-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
 
+            #print("network input: ",network_input)
+            #print("feature data: ",feature_data)
+            #print("mean vals inp: ",self.mean_vals_inp)
+            #print("std vals inp: ",self.std_vals_inp)
+            #input("check")
 
             self.times_list_train.append(time_data)
             self.feature_list_train.append(feature_data)
+            #self.inputs_list_train.append(network_input)
+
+        # get data averaged statistics from training data only
+
+        joined_feature_data=np.concatenate(self.feature_list_train,axis=1)
+
+        mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out=standard_score_norm(joined_feature_data)
+
+        self.mean_vals_inp=mean_vals_inp
+        self.std_vals_inp=std_vals_inp
+        self.mean_vals_out=mean_vals_out
+        self.std_vals_out=std_vals_out
+
+        # print("mean vals inp: ",self.mean_vals_inp)
+        # print("std vals inp: ",self.std_vals_inp)
+        # print("mean vals out: ",self.mean_vals_out)
+        # print("std vals out: ",self.std_vals_out)
+        # input("check")
+
+        # normalize input data
+
+        for i_data in range(len(self.train_data_files_list)):
+            network_input=(self.feature_list_train[i_data]-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)
+            # print("feature data: ",self.feature_list_train[i_data])
+            # print("network input: ",network_input)
+            # input("check")
             self.inputs_list_train.append(network_input)
 
         self.num_train_traj=len(self.train_data_files_list)

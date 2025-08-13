@@ -19,7 +19,7 @@ def _forward_pass(network_input,network):
 
     return interm_comp
 
-def standard_score_norm(time_data,feature_data):
+def standard_score_norm(feature_data):
 
     # use true ODE function to get normalizations for both inputs and outputs
     
