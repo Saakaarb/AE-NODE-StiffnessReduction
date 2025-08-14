@@ -27,7 +27,8 @@ if __name__=="__main__":
     if config_handler.get_config_status("neural_ode.training.precision")=='float64':
         jax.config.update("jax_enable_x64", True)
         logging_manager.log("Using float64 precision")
-        logging_manager.log("Verify dtype:", jax.numpy.array(0.0).dtype)
+        assert jax.numpy.array(0.0).dtype=='float64', "Precision set to float64 but dtype is not float64"
+        #logging_manager.log("Verify dtype:", jax.numpy.array(0.0).dtype)
 
     # import classes that use jax after setting precision
     from src.lib.data_processing.classes import Data_Processing

@@ -11,39 +11,25 @@ from pathlib import Path
 import time
 import shutil
 import matplotlib.pyplot as plt
+from functools import partial
 
 # jit functions need to sit outside of classes
 
 @jax.jit
-def _loss_fn_autoencoder(constants,networks,data_dict):
+def _compute_recon_loss(input_data,predicted_specie,data_dict):
+    recon_mask=data_dict['recon_mask']
+    return jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(predicted_specie-input_data,recon_mask))))
 
-    lam=constants['stiffness_reduction_weight'] # weight for stiffness reduction loss
+@jax.jit
+def _compute_condition_number_norm(data_dict,latent_space_preds):
     eps=1E-12 # prevents division by zero
     eps_dt=1E-30 # prevents division by zero
 
-    # data in shape [num_traj_samples,max_steps,num_inputs]
-    input_data=data_dict['input_data']
     time_data=data_dict['all_time_data_broadcasted']
-    recon_mask=data_dict['recon_mask']
-    
+
     # masks for condition number regularization
     cond_1_mask=data_dict['cond_1_mask']
     cond_2_mask=data_dict['cond_2_mask']
-    
-
-    # forward pass data through encoder
-    latent_space_preds=_forward_pass(input_data,networks['encoder'])
-
-    # forward pass latent rep through decoder
-    predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
-    recon_loss = jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(predicted_specie,recon_mask)-input_data)))
-
-    # TODO make this optional
-
-    # condition number regularization
-    # this section takes an approximation of the condition number as described in:
-    # Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics: Dikeman, Zhang and Yang (2022)
-    # and introduces a multi-objective optimization term
 
     dt = jnp.diff(time_data, axis=1)  # Shape: [batch, time-1, features]
     dlatent = jnp.diff(latent_space_preds, axis=1)  # Shape: [batch, time-1, features]
@@ -61,6 +47,36 @@ def _loss_fn_autoencoder(constants,networks,data_dict):
     cond_3 = jnp.sqrt(jnp.mean(jnp.square(dlatent[:,1:,:] - dlatent[:,:-1,:]), axis=1))
 
     cond_loss=jnp.mean(cond_numer/(cond_3))
+
+    return cond_loss
+
+@partial(jax.jit,static_argnums=(3,))
+def _loss_fn_autoencoder(constants:dict,networks:dict,data_dict:dict,stiffness_reduction:bool):
+
+    lam=constants['stiffness_reduction_weight'] # weight for stiffness reduction loss
+    
+    # data in shape [num_traj_samples,max_steps,num_inputs]
+    input_data=data_dict['input_data']
+    
+    # forward pass data through encoder
+    latent_space_preds=_forward_pass(input_data,networks['encoder'])
+
+    # forward pass latent rep through decoder
+    predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
+
+    # construct reconstruction
+    recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
+
+    # condition number regularization
+    # this section takes an approximation of the condition number as described in:
+    # Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics: Dikeman, Zhang and Yang (2022)
+    # and introduces a multi-objective optimization term
+
+    if stiffness_reduction:
+        cond_loss=_compute_condition_number_norm(data_dict,latent_space_preds)
+    else:
+        cond_loss=jnp.zeros(())
+    
     
     return recon_loss + lam*cond_loss
 
@@ -75,7 +91,10 @@ class Encoder_Decoder():
 
         self.training_loss_values=[]
         self.test_loss_values=[]
+        self.test_cond_loss_values=[]
         self.print_freq=self.config_handler.get_config_status("encoder_decoder.training.print_freq")
+
+        self.stiffness_reduction=bool(self.config_handler.get_config_status("encoder_decoder.training.stiffness_reduction"))
 
         self.training_constants=self.data_processing_handler.get_training_constants()
 
@@ -103,8 +122,8 @@ class Encoder_Decoder():
         # test loaded model
         if self.config_handler.get_config_status("encoder_decoder.testing.test_model"):
             self.logging_manager.log("Testing loaded encoder and decoder weights")
-            error=self.test_error_compute(self.encoder_object.weights,self.decoder_object.weights,save_results=True)
-            self.logging_manager.log(f"Test error: {error}")
+            error,cond_loss=self.test_error_compute(self.encoder_object.weights,self.decoder_object.weights,save_results=True)
+            self.logging_manager.log(f"Test error: {error}, cond loss: {cond_loss}")
 
             if self.config_handler.get_config_status("encoder_decoder.testing.visualization.plot_results"):
                 self.logging_manager.log("Visualizing results")
@@ -183,6 +202,7 @@ class Encoder_Decoder():
         self.best_training_loss=float('inf')
         self.best_test_loss=float('inf')
 
+        # training loop
         t1=time.time()
         for i_step in range(self.training_iters):
 
@@ -227,15 +247,16 @@ class Encoder_Decoder():
 
             # update values in object, which is used to compute test error
 
-            error=self.test_error_compute(self.trainable_variables['encoder'],self.trainable_variables['decoder'])
+            error,cond_loss=self.test_error_compute(self.trainable_variables['encoder'],self.trainable_variables['decoder'])
 
             self.test_loss_values.append(error)
+            self.test_cond_loss_values.append(cond_loss)
             self.training_loss_values.append(value)
 
-            self.logging_manager.log(f"Iteration number: {train_step}, loss: {value}, test error: {error}, best test loss: {self.best_test_loss}")
+            self.logging_manager.log(f"Iteration number: {train_step}, loss: {value}, test error: {error}, test cond loss: {cond_loss:.2e}, best test loss: {self.best_test_loss}")
         
             # log to mlflow
-            log_to_mlflow_metrics({'enc_dec_training_loss':value,'enc_dec_test_loss':error},train_step)
+            log_to_mlflow_metrics({'enc_dec_training_loss':value,'enc_dec_test_loss':error,'enc_dec_test_cond_loss':cond_loss},train_step)
 
             if  True:#error<self.best_test_loss:
                 self.logging_manager.log(f"New best test loss: {error}, recording weights")
@@ -247,7 +268,7 @@ class Encoder_Decoder():
 
     def loss_fn(self,constants,networks,data_dict):
 
-        return _loss_fn_autoencoder(constants,networks,data_dict)
+        return _loss_fn_autoencoder(constants,networks,data_dict,self.stiffness_reduction)
 
     # plot predictions for a single trajectory
     def test_error_compute(self,enc_weights,dec_weights,save_results:bool=False)->float:
@@ -267,7 +288,14 @@ class Encoder_Decoder():
         input_preds=_forward_pass(latent_space_preds,dec_weights)
 
         # compute error
-        error=jnp.sqrt(jnp.mean(jnp.square(input_data-input_preds)))
+        # TODO: use a mask to ignore the extra time steps
+        #error=jnp.sqrt(jnp.mean(jnp.square(input_data-input_preds)))
+        error=_compute_recon_loss(input_data,input_preds,self.test_data_dict)
+
+        #if self.stiffness_reduction:
+        # track stiffness loss
+        cond_loss=_compute_condition_number_norm(self.test_data_dict,latent_space_preds)
+        
 
         #Save and plot autoencoder performance
         #---------------------------------------------------------------
@@ -304,7 +332,7 @@ class Encoder_Decoder():
             log_to_mlflow_artifacts(enc_dec_res_dir/Path('predictions.pkl'),"predictions_enc_dec")
             log_to_mlflow_artifacts(enc_dec_res_dir/Path('true_data.pkl'),"true_data_enc_dec")
         
-        return error
+        return error,cond_loss
     
     def save_enc_dec(self):
 
