@@ -64,10 +64,16 @@ class Data_Processing():
         # masks used during training
         self.recon_mask_train=None # mask for encoder-decoder reconstruction loss of shape: [num_train_traj,max_train_traj_size,num_inputs]
         self.latent_space_mask_train=None # mask for latent space loss of shape: [num_train_traj,max_train_traj_size,n_latent_space]
-
         self.cond_1_mask_train=None # mask for condition number regularization used for stiffness reduction of latent space of shape: [num_train_traj,max_train_traj_size-2,n_latent_space]
         self.cond_2_mask_train=None # mask for condition number regularization used for stiffness reduction of latent space of shape: [num_train_traj,max_train_traj_size-1,n_latent_space]
         self.all_time_data_broadcasted_train=None # mask for all time data of shape: [num_train_traj,max_train_traj_size,n_latent_space]
+
+        # masks used during testing
+        self.recon_mask_test=None # mask for encoder-decoder reconstruction loss of shape: [num_test_traj,max_test_traj_size,num_inputs]
+        self.latent_space_mask_test=None # mask for latent space loss of shape: [num_test_traj,max_test_traj_size,n_latent_space]
+        self.cond_1_mask_test=None # mask for condition number regularization used for stiffness reduction of latent space of shape: [num_test_traj,max_test_traj_size-2,n_latent_space]
+        self.cond_2_mask_test=None # mask for condition number regularization used for stiffness reduction of latent space of shape: [num_test_traj,max_test_traj_size-1,n_latent_space]
+        self.all_time_data_broadcasted_test=None # mask for all time data of shape: [num_test_traj,max_test_traj_size,n_latent_space]
 
         self.dt_eps=1E-12 # used to add very small time steps to recorded time to keep time arrays strictly increasing
         self.precision_change_time_cutoff=1E-7 # time scale cutoff for changing precision from float32 to float64
@@ -397,7 +403,7 @@ class Data_Processing():
         self.cond_1_mask_train=np.ones([self.num_train_traj,self.max_train_traj_size-2,n_latent_space])
         self.cond_2_mask_train=np.ones([self.num_train_traj,self.max_train_traj_size-2,n_latent_space])
 
-        # required so that lax.scan works
+        # required for vectorized calculations
         self.all_time_data_broadcasted_train=np.ones([self.num_train_traj,self.max_train_traj_size,n_latent_space])
 
         for i_traj in range(self.num_train_traj):
@@ -424,6 +430,8 @@ class Data_Processing():
             None: Modifies instance variables
         """
 
+        # TODO add a broadcasted time dataset
+
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
 
         # mask for encoder-decoder reconstruction loss
@@ -432,10 +440,26 @@ class Data_Processing():
         # mask for latent space loss
         self.latent_space_mask_test=np.ones([self.num_test_traj,self.max_test_traj_size,n_latent_space])
 
+        # mask for condition number regularization used for stiffness reduction of latent space
+        # this will be calculated as per the reference:
+        #Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics: Dikeman, Zhang and Yang (2022)
+        # -2 is since the computations are derivatives
+        self.cond_1_mask_test=np.ones([self.num_test_traj,self.max_test_traj_size-2,n_latent_space])
+        self.cond_2_mask_test=np.ones([self.num_test_traj,self.max_test_traj_size-2,n_latent_space])
+
+        # required for vectorized calculations
+        self.all_time_data_broadcasted_test=np.ones([self.num_test_traj,self.max_test_traj_size,n_latent_space])
+
         for i_traj in range(self.num_test_traj):
 
             self.recon_mask_test[i_traj,int(self.num_timesteps_each_traj_test[i_traj]):,:]=0.0
             self.latent_space_mask_test[i_traj,int(self.num_timesteps_each_traj_test[i_traj]):,:]=0.0
+            self.cond_1_mask_test[i_traj,(int(self.num_timesteps_each_traj_test[i_traj])-2):,:]=0.0
+            self.cond_2_mask_test[i_traj,(int(self.num_timesteps_each_traj_test[i_traj])-1):,:]=0.0
+
+        for i_latent in range(n_latent_space):
+
+            self.all_time_data_broadcasted_test[:,:,i_latent]=self.all_time_data_test
 
 
     def get_raw_training_data(self)->dict[str,list]:
@@ -607,6 +631,9 @@ class Data_Processing():
             "initial_condition_data":self.initial_condition_data_test,
             "recon_mask":self.recon_mask_test,
             "latent_space_mask":self.latent_space_mask_test,
+            "cond_1_mask":self.cond_1_mask_test,
+            "cond_2_mask":self.cond_2_mask_test,
+            "all_time_data_broadcasted":self.all_time_data_broadcasted_test,
             
         }
         return test_data_dict
@@ -696,6 +723,8 @@ class Data_Processing():
                             compression='gzip', compression_opts=9)
             f.create_dataset('latent_space_mask_test', data=self.latent_space_mask_test, 
                             compression='gzip', compression_opts=9)
+            f.create_dataset('all_time_data_broadcasted_test', data=self.all_time_data_broadcasted_test, 
+                            compression='gzip', compression_opts=9)
 
         # log to mlflow
         mlflow.log_artifact(os.path.join(data_dir, 'training_data.h5'), "training_data")
@@ -766,7 +795,8 @@ class Data_Processing():
 
             self.recon_mask_test = f['recon_mask_test'][:]
             self.latent_space_mask_test = f['latent_space_mask_test'][:]
-            
+            self.all_time_data_broadcasted_test = f['all_time_data_broadcasted_test'][:]
+
             self.num_test_traj = f.attrs['num_test_traj']
             self.max_test_traj_size = f.attrs['max_test_traj_size']
             self.num_timesteps_each_traj_test = f['num_timesteps_each_traj_test'][:]

@@ -1,7 +1,7 @@
 data_processing:
 
     saving_loading:
-        load_data: True # True/False
+        load_data: False # True/False
         save_data: True # True/False
         raw_data_path: "script_data"
         processed_data_path: "processed_data"
@@ -20,7 +20,7 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: True # True/False
+        load_model: False # True/False
         model_output_dir: 'encoder_decoder_weights'
         load_path: 'encoder_decoder_weights.pkl' 
 
@@ -44,7 +44,7 @@ encoder_decoder:
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
         # experimental settings
-        stiffness_reduction: True # yes/no
+        stiffness_reduction: False # True/False
         simultaneous_training: False # True/False
 
         # loss function

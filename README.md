@@ -4,7 +4,7 @@ Autoencoder Neural Ordinary Differential Equations (NODE) with stiffness reducti
 
 This repository is a GPU-efficient open-source implementation of NeuralODE for irregularly sampled time series data with stiffness reduction techniques. Surrogate modeling of time series data that exhibits stiffness characteristics (for eg. multiple, order-of-magnitude different time scales) is an open and challenging problem. An example domain where this problem is very prevalent is combustion modeling, where reactions are governed by stiff Ordinary Differential equations. The cost of solving these stiff ODEs at every node in a large simulation is prohibitive. 
 
-Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. 
+Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. However, Neural ODEs come with training challenges
 
 # Methodology
 
@@ -44,7 +44,7 @@ Further GPU optimization
     - Check data memory requirements, compare with GPU mem, and accordingly change sampling strategy
 tests
 equinox based models
-separate encoder function to look at stiffness reduction
+scaling of latent space inputs
 
 Tips:
 
@@ -57,6 +57,8 @@ Tips:
 4. try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
 5. Ensure the batch size is small enough such that it plus computations can fit on device
 6. Do not have long tails in training trajectories where no "kinetics" or actions occur. For example, while simulating a combustion reaction, for every training trajectory if the reaction is complete in a maximum of ~10^(-4) seconds, do not use data lasting upto 10^(-2) seconds. This creates a long tailed trajectory where the NODE must learn to predict 0 (which it does not do effectively) and also reduces the effectiveness of scaling tricks borrowed from [5].
+7. If the system timescale is very small (max time < 10^(-7)), always use fp64 training (set in config: neural_ode.training.precision) instead of fp32. 
+8. When training the encoder-decoder with stiffness reduction, play around with the value of the stiffness reduction coefficient by observing the relative magnitude of "test error" and "test cond loss" printed while training. "test error" and "stiffness_reduction_weight*test_cond_loss" should be roughly the same O.O.M for effective training.
 
 This repo leverages techniques and ideas from the following works:
 
