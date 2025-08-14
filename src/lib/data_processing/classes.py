@@ -69,6 +69,9 @@ class Data_Processing():
         self.cond_2_mask_train=None # mask for condition number regularization used for stiffness reduction of latent space of shape: [num_train_traj,max_train_traj_size-1,n_latent_space]
         self.all_time_data_broadcasted_train=None # mask for all time data of shape: [num_train_traj,max_train_traj_size,n_latent_space]
 
+        self.dt_eps=1E-12 # used to add very small time steps to recorded time to keep time arrays strictly increasing
+        self.precision_change_time_cutoff=1E-7 # time scale cutoff for changing precision from float32 to float64
+
         # load data file lists
         self.load_data_files()
 
@@ -172,6 +175,12 @@ class Data_Processing():
                 #self.std_vals_out=std_vals_out
                 #self.logging_manager.log("Warning: using only the first trajectory to get standard score normalization parameters")
                 self.end_time=time_data[-1]
+
+                if self.end_time < self.precision_change_time_cutoff:
+                    if self.config_handler.get_config_status("neural_ode.training.precision")=='float32':
+                        raise ValueError("The detected time scales of the system are too small to use 'float32' precision.\
+                                          Please use 'float64' precision instead in config file at path: neural_ode.training.precision")
+
                 self.num_inputs=feature_data.shape[0]
                 self.latent_scaling=np.ones(int(self.config_handler.get_config_status("data_processing.latent_space_dim")))
                 # inferred from data
@@ -283,10 +292,10 @@ class Data_Processing():
 
             all_input_data[i_traj,:int(self.num_timesteps_each_traj_train[i_traj]),:]=self.inputs_list_train[i_traj].T
             all_time_data[i_traj,:int(self.num_timesteps_each_traj_train[i_traj])]=self.times_list_train[i_traj]
-            all_time_data[i_traj,int(self.num_timesteps_each_traj_train[i_traj]):]=self.end_time#times_list[i_traj]
+            all_time_data[i_traj,int(self.num_timesteps_each_traj_train[i_traj]):]=self.end_time+np.arange(1,self.max_train_traj_size-int(self.num_timesteps_each_traj_train[i_traj])+1)*self.dt_eps#times_list[i_traj]
 
             start_end_time_data[i_traj,0]=self.times_list_train[i_traj][0]
-            start_end_time_data[i_traj,1]=self.times_list_train[i_traj][-1]
+            start_end_time_data[i_traj,1]=all_time_data[i_traj,-1]#self.times_list_train[i_traj][-1]
             initial_condition_data[i_traj,:]=self.inputs_list_train[i_traj][:,0]
 
         self.all_input_data_train=all_input_data
@@ -317,10 +326,10 @@ class Data_Processing():
 
             all_input_data[i_traj,:int(self.num_timesteps_each_traj_test[i_traj]),:]=self.inputs_list_test[i_traj].T
             all_time_data[i_traj,:int(self.num_timesteps_each_traj_test[i_traj])]=self.times_list_test[i_traj]
-            all_time_data[i_traj,int(self.num_timesteps_each_traj_test[i_traj]):]=self.end_time#times_list[i_traj]
+            all_time_data[i_traj,int(self.num_timesteps_each_traj_test[i_traj]):]=self.end_time+np.arange(1,self.max_test_traj_size-int(self.num_timesteps_each_traj_test[i_traj])+1)*self.dt_eps#times_list[i_traj]
 
             start_end_time_data[i_traj,0]=self.times_list_test[i_traj][0]
-            start_end_time_data[i_traj,1]=self.times_list_test[i_traj][-1]
+            start_end_time_data[i_traj,1]=all_time_data[i_traj,-1]#self.times_list_test[i_traj][-1]
             initial_condition_data[i_traj,:]=self.inputs_list_test[i_traj][:,0]
 
         self.all_input_data_test=all_input_data
