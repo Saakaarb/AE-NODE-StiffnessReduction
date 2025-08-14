@@ -11,9 +11,9 @@ data_processing:
     check_raw_data_shape: True
     total_available_features: 5 # the total number of features in the data. This does NOT include time,
                                 # assumed to be the first row/column (at index 0)
-    feature_train_index: [1,2,3,4,5] #the row/column indices (0 indexed) from the dataset of which species should be in the training set
+    feature_train_index: [1,2,3,4,5] #the row/column indices (0 indexed) from the dataset files of which species should be in the training set
                                         # DO NOT include 0 (assumed to be time); this will raise an error
-    data_arrange_mode: 'row_major' # each datapoint is a row in the data files
+    data_arrange_mode: 'row_major' # row_major: each datapoint is a row in the data files, column_major: each datapoint is a column in the data files
     latent_space_dim: 2
     num_samples_per_batch: 1024
 
@@ -82,7 +82,7 @@ neural_ode:
         learning_rate_decay_steps: 1000
 
         # batch processing
-        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 10000
+        num_training_iters: 5000 # for l-bfgs use max 200 steps, for adam use 10000
         
         print_freq: 100
 
