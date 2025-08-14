@@ -15,8 +15,10 @@ Experiment and data tracking
     - Experiment tracking via mlflow
     - data version tracking via DVC
 
+Supports trajectories of unequal lengths, at very small time scales(final time must be same)
+
 Data normalization
-    - Done on training data, avoids test data
+    - Done on training data, avoids test data to avoid data leakage
 
 Encoder to change physical space to a "stiffness reduced" and dimension reduced latent space
     - Includes a latent space stiffness reduction term. can be turned off by setting the weight (stiffness reduction weight) to 0

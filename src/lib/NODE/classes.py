@@ -18,9 +18,6 @@ import time
 import shutil
 
 
-#jax.config.update("jax_enable_x64", True)
-
-
 ##########################################################
 
 @jax.jit
@@ -94,10 +91,10 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=True,
     #                                max_steps=600)
 
-    solution = diffrax.diffeqsolve(term,diffrax.Heun(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
+    solution = diffrax.diffeqsolve(term,diffrax.Dopri8(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
                                     max_steps=max_traj_size-1,stepsize_controller=stepsize_controller)
-    #jax.debug.print("solution.ts: {x}, curr_time_data: {y}, solution_time_shape: {z}, curr_time_data_shape: {w}",x=solution.ts,y=curr_time_data,z=solution.ts.shape,w=curr_time_data.shape)
+    #jax.debug.print("solution.ts: {x}, curr_time_data: {y}",x=solution.ts,y=curr_time_data)
 
     #solution = diffrax.diffeqsolve(term,diffrax.Kvaerno5(),t0=t_init,t1=t_final,dt0 = 1e-11,y0=y_latent_init,
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
