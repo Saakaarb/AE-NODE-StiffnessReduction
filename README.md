@@ -2,7 +2,7 @@
 Autoencoder Neural Ordinary Differential Equations (NODE) with stiffness reduction for surrogate modeling of stiff and irregular time series data.
 
 
-This repository is an open-source implementation of NeuralODE for irregularly sampled time series data with stiffness reduction techniques. Surrogate modeling of time series data that exhibits stiffness characteristics (for eg. multiple, order-of-magnitude different time scales) is an open and challenging problem. An example domain where this problem is very prevalent is combustion modeling, where reactions are governed by stiff Ordinary Differential equations. The cost of solving these stiff ODEs at every node in a large simulation is prohibitive. 
+This repository is a GPU-efficient open-source implementation of NeuralODE for irregularly sampled time series data with stiffness reduction techniques. Surrogate modeling of time series data that exhibits stiffness characteristics (for eg. multiple, order-of-magnitude different time scales) is an open and challenging problem. An example domain where this problem is very prevalent is combustion modeling, where reactions are governed by stiff Ordinary Differential equations. The cost of solving these stiff ODEs at every node in a large simulation is prohibitive. 
 
 Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. 
 
@@ -11,14 +11,21 @@ Recent works have leveraged machine learning to create models that reduce the co
 
 Features:
 
+Experiment and data tracking
+    - Experiment tracking via mlflow
+    - data version tracking via DVC
+
+Data normalization
+    - Done on training data, avoids test data
+
 Encoder to change physical space to a "stiffness reduced" and dimension reduced latent space
     - Includes a latent space stiffness reduction term. can be turned off by setting the weight (stiffness reduction weight) to 0
     - 
 Neural ODE to step through time, backpropagating gradients in this latent space
     - diffrax
-    - euler stepping
+    - Heun stepping
     - handles failure
-    -
+    - vmap based parallelization of NODE training
 decoder to change back to physical space
 Scaling to alleviate training issues
     - automated input normalization
@@ -32,14 +39,14 @@ controlled from config file
 TODO:
 Further GPU optimization
     - Setup prefetch
-L-BFGS training
+    - Check data memory requirements, compare with GPU mem, and accordingly change sampling strategy
 tests
 equinox based models
-try other data
+separate encoder function to look at stiffness reduction
 
 Tips:
 
-1. Train encoder decoder for a while; unstable enc dec causes NODE failure quite quickly
+1. Train encoder decoder for a while, to as low a loss as possible; unstable enc dec causes NODE failure quite quickly
 2. You have the option of selecting which rows/columns to include in the training set. Make sure all features 
    that are causative are included in the training data. For example, if modeling a chemical reaction, by not including the temperature, the network cannot learn the appropriate cause effect relationships from data and this will result
    in a poor model
@@ -47,7 +54,7 @@ Tips:
 
 4. try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
 5. Ensure the batch size is small enough such that it plus computations can fit on device
-
+6. Do not have long tails in training trajectories where no "kinetics" or actions occur. For example, while simulating a combustion reaction, for every training trajectory if the reaction is complete in a maximum of ~10^(-4) seconds, do not use data lasting upto 10^(-2) seconds. This creates a long tailed trajectory where the NODE must learn to predict 0 (which it does not do effectively) and also reduces the effectiveness of scaling tricks borrowed from [5].
 
 This repo leverages techniques and ideas from the following works:
 

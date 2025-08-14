@@ -435,7 +435,7 @@ class Neural_ODE():
         # make shape (1,num_inputs) since each trajectory is computed separately
         mean_vals_inp=self.test_constants['mean_vals_inp'].reshape(1,-1)
         std_vals_inp=self.test_constants['std_vals_inp'].reshape(1,-1)
-        max_traj_size=self.test_constants['max_test_traj_size']
+        max_traj_size=int(self.test_constants['max_test_traj_size']) # convert to python int
 
         for i_traj in range(num_test_traj):
             self.logging_manager.log(f"Predicting trajectory {i_traj+1} of {num_test_traj}")
