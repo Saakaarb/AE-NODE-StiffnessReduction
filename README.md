@@ -1,6 +1,10 @@
 # Introduction
 
-(add license and dependency information)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![JAX](https://img.shields.io/badge/JAX-0.6+-green.svg)](https://github.com/google/jax)
+[![Diffrax](https://img.shields.io/badge/Diffrax-0.7+-orange.svg)](https://github.com/patrick-kidger/diffrax)
+
 Autoencoder Neural Ordinary Differential Equations (NODE) with dimension reduction and stiffness reduction for surrogate modeling of stiff and irregular time series data. This repository is a GPU-efficient open-source implementation of NODEs for irregularly sampled time series (with potentially different trajectory lengths) data with dimension reduction and stiffness reduction techniques.
 
 # Value Proposition
@@ -14,6 +18,24 @@ Recent works have leveraged machine learning to create models that reduce the co
 2. They are also nontrivial to effectively parallelize on a GPU, given their autoregressive nature. 
 
 # Installation
+
+Clone this repo:
+
+```
+git clone git@github.com:Saakaarb/AE-NODE-StiffnessReduction.git
+```
+
+And then create a virtual env:
+
+```
+python/python3 -m venv venv
+```
+
+Finally, install the requirements
+
+```
+pip install -r requirements.txt
+```
 
 # Key Features
 
@@ -47,8 +69,7 @@ where
 3. Effective GPU utilization: The framework efficiently can handle staggered trajectories (trajectories of unequal length) on GPU, as it is common in many applications involving time series data to have staggered, non-uniformly sampled trajectories. This is done by a combination of masking and vectorizing strategies to reduce memory latency, H2D transfers and maximize GPU occupancy. Shown below is an example of using a mask to remove extra predictions on irregularly sampled, non uniform trajectories; the hadamard product of the two ensures physicality while allowing vectorization.
 
 <p align="center">
-  <img src="img/pred_matrix_autoenc.png" alt="Autoencoder Prediction Matrix" width="400" style="margin-right: 20px;">
-  <img src="img/mask_autoencoder.png" alt="Autoencoder Masking Strategy" width="400">
+  <img src="img/mask_demo_main.png" alt="Autoencoder Prediction Matrix w mask width="400" style="margin-right: 20px;">
 </p>
 
 
@@ -78,7 +99,7 @@ To demonstrate the utility of the framework, we will create a model that learns 
 
 ## Step 1: Training Data
 
-The training data is in tutorial/tutorial_data. It is in row_major format. Sample is shown below:
+The training data is in tutorial/tutorial_data. It is in row_major format. The first row is (and always has to be) time, and every other row is a feature that can be used  Sample is shown below:
 
 ```
 0.000000000000000000e+00,8.347245409015025696e-06,1.669449081803005139e-05, ..... 
@@ -91,7 +112,7 @@ The training data is in tutorial/tutorial_data. It is in row_major format. Sampl
 
 ## Step 2: Configuration file
 
-The config file is in tutorial/tutorial_config.yml. Look through it to see the settings being used
+The config file is in tutorial/tutorial_config.yml. It has been set up to run easily.
 
 ## Step 3: Running the training
 
