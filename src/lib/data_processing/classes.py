@@ -346,7 +346,7 @@ class Data_Processing():
 
     
 
-    def load_data_files(self):
+    def load_data_files(self)-> None:
         """
         Load raw data file paths and split into training/testing sets.
         
@@ -813,7 +813,7 @@ class Data_Processing():
 
         self.logging_manager.log(f"Data loaded from {data_dir}/")
     
-    def _place_on_device(self,data):
+    def _place_on_device(self,data:np.ndarray)-> jax.Array:
         """Place numpy array on GPU device and convert to JAX array"""
         if isinstance(data, np.ndarray):
             return jax.device_put(data, self.device)
