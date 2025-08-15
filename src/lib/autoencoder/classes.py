@@ -12,16 +12,48 @@ import time
 import shutil
 import matplotlib.pyplot as plt
 from functools import partial
+from typing import Any
 
 # jit functions need to sit outside of classes
 
 @jax.jit
-def _compute_recon_loss(input_data,predicted_specie,data_dict):
+def _compute_recon_loss(input_data:jax.Array,predicted_specie:jax.Array,data_dict:dict[str,jax.Array]):
+    """
+    Compute reconstruction loss between input data and predicted species.
+    
+    This function calculates the root mean square error between the input data and 
+    predicted species, applying a reconstruction mask to focus on specific regions.
+    
+    Args:
+        input_data (jax.Array): Original input data of shape [batch, time, features]
+        predicted_specie (jax.Array): Predicted species data from the autoencoder
+        data_dict (dict[str, jax.Array]): Dictionary containing 'recon_mask' for masking
+        
+    Returns:
+        jax.Array: Scalar reconstruction loss value
+    """
     recon_mask=data_dict['recon_mask']
     return jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(predicted_specie-input_data,recon_mask))))
 
 @jax.jit
-def _compute_condition_number_norm(data_dict,latent_space_preds):
+def _compute_condition_number_norm(data_dict:dict[str,jax.Array],latent_space_preds:jax.Array):
+    """
+    Compute condition number normalization for stiffness reduction regularization.
+    
+    This function implements the stiffness reduction loss as described in the paper:
+    "Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling 
+    of Combustion Chemical Kinetics" by Dikeman, Zhang and Yang (2022).
+    
+    The function computes derivatives of latent space predictions with respect to time
+    and applies condition number regularization to improve numerical stability.
+    
+    Args:
+        data_dict (dict[str, jax.Array]): Dictionary containing time data and condition masks
+        latent_space_preds (jax.Array): Latent space predictions from encoder
+        
+    Returns:
+        jax.Array: Scalar condition number loss value
+    """
     eps=1E-12 # prevents division by zero
     eps_dt=1E-30 # prevents division by zero
 
@@ -38,12 +70,8 @@ def _compute_condition_number_norm(data_dict,latent_space_preds):
     cond_1 = jnp.divide(dlatent[:,1:,:], dt[:,1:,:] + eps_dt) * cond_1_mask
     cond_2 = jnp.divide(dlatent[:,:-1,:], dt[:,:-1,:] + eps_dt) * cond_2_mask
 
-    #cond_1=jnp.multiply(jnp.true_divide(latent_space_preds.at[:,2:,:].get()-latent_space_preds.at[:,1:-1,:].get(),time_data[:,2:,:]-time_data[:,1:-1,:]+eps_dt),cond_1_mask)
-    
-    #cond_2=jnp.multiply(jnp.true_divide(latent_space_preds.at[:,1:-1,:].get()-latent_space_preds.at[:,:-2,:].get(),time_data[:,1:-1,:]-time_data[:,:-2,:]+eps_dt),cond_2_mask)
-    
     cond_numer= jnp.sqrt(jnp.mean(jnp.square(cond_1-cond_2)+eps,axis=1))
-    #cond_3= jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_preds.at[:,2:,:].get()-latent_space_preds.at[:,:-2,:].get()+eps,cond_1_mask))))
+
     cond_3 = jnp.sqrt(jnp.mean(jnp.square(dlatent[:,1:,:] - dlatent[:,:-1,:]), axis=1))
 
     cond_loss=jnp.mean(cond_numer/(cond_3))
@@ -52,6 +80,22 @@ def _compute_condition_number_norm(data_dict,latent_space_preds):
 
 @partial(jax.jit,static_argnums=(3,))
 def _loss_fn_autoencoder(constants:dict,networks:dict,data_dict:dict,stiffness_reduction:bool):
+    """
+    Compute the total loss for the autoencoder training.
+    
+    This function combines reconstruction loss with optional stiffness reduction
+    regularization. The stiffness reduction term helps improve numerical stability
+    of the learned latent representation.
+    
+    Args:
+        constants (dict): Dictionary containing training constants including stiffness reduction weight
+        networks (dict): Dictionary containing encoder and decoder network weights
+        data_dict (dict): Dictionary containing input data and masks
+        stiffness_reduction (bool): Whether to include stiffness reduction regularization
+        
+    Returns:
+        jax.Array: Total loss value combining reconstruction and condition number losses
+    """
 
     lam=constants['stiffness_reduction_weight'] # weight for stiffness reduction loss
     
@@ -82,8 +126,37 @@ def _loss_fn_autoencoder(constants:dict,networks:dict,data_dict:dict,stiffness_r
 
 
 class Encoder_Decoder():
+    """
+    Autoencoder class for learning low-dimensional representations of high-dimensional data.
+    
+    This class implements an encoder-decoder architecture that can compress high-dimensional
+    input data into a lower-dimensional latent space and reconstruct it back. It supports
+    optional stiffness reduction regularization for improved numerical stability.
+    
+    Attributes:
+        config_handler (ConfigReader): Configuration handler for model parameters
+        logging_manager (LoggingManager): Manager for logging training progress
+        data_processing_handler (Data_Processing): Handler for data processing operations
+        training_loss_values (list): List to track training loss during training
+        test_loss_values (list): List to track test loss during training
+        test_cond_loss_values (list): List to track condition number loss during training
+        print_freq (int): Frequency of printing training progress
+        stiffness_reduction (bool): Whether to use stiffness reduction regularization
+        training_constants (dict): Constants used during training
+    """
 
     def __init__(self,config_handler:ConfigReader,logging_manager:LoggingManager,data_processing_handler:Data_Processing)->None:
+        """
+        Initialize the Encoder_Decoder class.
+        
+        This method sets up the autoencoder, initializes or loads model weights,
+        trains the model if needed, and optionally tests the model performance.
+        
+        Args:
+            config_handler (ConfigReader): Configuration handler for model parameters
+            logging_manager (LoggingManager): Manager for logging training progress
+            data_processing_handler (Data_Processing): Handler for data processing operations
+        """
 
         self.config_handler=config_handler # constants that do not change during training
         self.logging_manager=logging_manager
@@ -130,6 +203,13 @@ class Encoder_Decoder():
                 self.visualize_results()
 
     def check_save_load_dirs(self):
+        """
+        Check and create necessary directories for saving and loading models.
+        
+        This method ensures that the model output directory and testing save directory
+        exist, creating them if they don't.
+        """
+
         if not os.path.isdir(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))):
             os.mkdir(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir")))
         if not os.path.isdir(Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))):
@@ -137,6 +217,12 @@ class Encoder_Decoder():
 
 
     def __init_optimizer__(self):
+        """
+        Initialize the optimizer for training the autoencoder.
+        
+        This method sets up the optimizer based on configuration settings.
+        Currently supports Adam with learning rate decay and L-BFGS optimizers.
+        """
 
         if self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="adam":
 
@@ -154,7 +240,13 @@ class Encoder_Decoder():
 
 
     def _init_enc_dec(self):
-
+        """
+        Initialize the encoder and decoder networks.
+        
+        This method creates MLP networks for both encoder and decoder based on
+        configuration parameters. The encoder compresses input data to latent space,
+        while the decoder reconstructs from latent space back to input space.
+        """
 
         num_inputs=self.data_processing_handler.num_inputs
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
@@ -179,6 +271,13 @@ class Encoder_Decoder():
 
 
     def _train_enc_dec(self):
+        """
+        Train the encoder and decoder networks.
+        
+        This method implements the main training loop for the autoencoder.
+        It samples training data, computes gradients, updates network weights,
+        and tracks training progress including test performance.
+        """
 
         # get constants required for training
 
@@ -219,7 +318,20 @@ class Encoder_Decoder():
         self.logging_manager.log(f"Best test loss: {self.best_test_loss}")
 
 
-    def _train_step(self,opt_state,train_step):
+    def _train_step(self,opt_state:optax.OptState,train_step:int):
+        """
+        Execute a single training step.
+        
+        This method performs one iteration of training: samples data, computes
+        loss and gradients, updates network weights, and evaluates performance.
+        
+        Args:
+            opt_state (optax.OptState): Current optimizer state
+            train_step (int): Current training step number
+            
+        Returns:
+            optax.OptState: Updated optimizer state
+        """
 
         # sample trajectories from all
         data_dict=self.data_processing_handler.sample_training_data()
@@ -266,12 +378,41 @@ class Encoder_Decoder():
         
         return opt_state
 
-    def loss_fn(self,constants,networks,data_dict):
+    def loss_fn(self,constants:dict[str,Any],networks:dict[str,jax.Array],data_dict:dict[str,jax.Array]):
+        """
+        Compute the loss function for the autoencoder.
+        
+        This is a wrapper method that calls the JIT-compiled loss function
+        with the current stiffness reduction setting.
+        
+        Args:
+            constants (dict[str, Any]): Training constants
+            networks (dict[str, jax.Array]): Network weights
+            data_dict (dict[str, jax.Array]): Input data and masks
+            
+        Returns:
+            jax.Array: Computed loss value
+        """
 
         return _loss_fn_autoencoder(constants,networks,data_dict,self.stiffness_reduction)
 
     # plot predictions for a single trajectory
     def test_error_compute(self,enc_weights,dec_weights,save_results:bool=False)->float:
+        """
+        Compute test error and optionally save results.
+        
+        This method evaluates the autoencoder performance on test data,
+        computing reconstruction error and condition number loss. It can
+        optionally save predictions and true values for later analysis.
+        
+        Args:
+            enc_weights: Encoder network weights
+            dec_weights: Decoder network weights
+            save_results (bool): Whether to save results to files
+            
+        Returns:
+            tuple: (reconstruction_error, condition_number_loss)
+        """
 
         self.test_data_dict=self.data_processing_handler.get_test_data()
         self.test_constants=self.data_processing_handler.get_testing_constants()
@@ -335,6 +476,12 @@ class Encoder_Decoder():
         return error,cond_loss
     
     def save_enc_dec(self):
+        """
+        Save the trained encoder and decoder models to disk.
+        
+        This method serializes the encoder and decoder objects using pickle
+        and saves them to the configured model output directory.
+        """
 
         save_mats=[self.encoder_object,self.decoder_object]
 
@@ -342,12 +489,25 @@ class Encoder_Decoder():
 
             pickle.dump(save_mats,f,pickle.HIGHEST_PROTOCOL)
     def _load_enc_dec(self):
+        """
+        Load pre-trained encoder and decoder models from disk.
+        
+        This method deserializes the encoder and decoder objects from pickle
+        files. Note: This is marked as TODO for standardization.
+        """
 
         print("TODO : replace by standarized format loading")
         with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'rb') as f:
             self.encoder_object,self.decoder_object=pickle.load(f)
 
     def visualize_results(self):
+        """
+        Create visualization plots for test results.
+        
+        This method generates comparison plots between predicted and true values
+        for each test trajectory, input feature, and latent space dimension.
+        Plots are saved to the configured visualization directory.
+        """
 
         enc_dec_res_dir=Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))
         with open(enc_dec_res_dir/Path('predictions.pkl'),'rb') as f:

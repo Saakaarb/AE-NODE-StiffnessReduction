@@ -25,10 +25,11 @@ Clone this repo:
 git clone git@github.com:Saakaarb/AE-NODE-StiffnessReduction.git
 ```
 
-And then create a virtual env:
+And then create a virtual env, and activate it:
 
 ```
 python/python3 -m venv venv
+source venv/bin/activate
 ```
 
 Finally, install the requirements
@@ -79,7 +80,7 @@ where
 
 # Getting Started
 
-To demonstrate the utility of the framework, we will create a model that learns to autoregressively predict the results of a hydrocarbon combustion process. The reaction under consideration is a 2 step combustion of a methane-like fuel F:
+To demonstrate the utility of the framework, we will create a model that learns to autoregressively predict the results of a hydrocarbon combustion process, for a range of initial temperatures and fuel mass fractions. The reaction under consideration is a 2 step combustion of a methane-like fuel F:
 
 1. **Fuel oxidation:**  
    ```math
@@ -96,6 +97,16 @@ To demonstrate the utility of the framework, we will create a model that learns 
    ```math
    k_2 = A_2 e^{-E_2/(RT)},\quad A_2 = 5.0\times 10^5\ \mathrm{s^{-1}},\quad E_2 = 4.0\times 10^4\ \mathrm{J\,mol^{-1}}
    ```
+
+We will consider the following ranges of initial conditions:
+
+```
+Y_{F,init}=[0.03,0.1]
+Y_{Temp,init}=[1100,1300] K
+
+```
+
+The initial mass fractions of air and other components are adjusted to account for this.
 
 ## Step 1: Training Data
 
@@ -119,9 +130,35 @@ The config file is in tutorial/tutorial_config.yml. It has been set up to run ea
 To run the training, run the following command:
 
 ```
-python driver_script -c "tutorial/tutorial_config.yml"
+python driver_script -c "tutorial/tutorial_config.yml" # specify config file location
 ```
 ## Step 4: Results 
+
+The model is trained in 2 stages. First, the encoder-decoder is trained, then the neural ODE is trained keeping the weights of the encoder-decoder frozen.
+
+After the training is complete, the training curves and resulting predictions can be visualized. The code logs all metrics and artifacts through MLFlow for later use. Shwon below is an example training curve for encoder-decoder loss. **The training loss is much higher than test loss because it includes the stiffness reduction term**
+
+<p align="center">
+  <img src="img/enc_dec_loss.png" alt="Encoder Decoder training loss" width="400" style="margin-right: 20px;">
+</p>
+
+We can visualize how effectively the encoder-decoder is able to encode the physical space in the latent space, by passing a test point through the encoder-decoder architecture and comparing to the truth:
+
+<p align="center">
+  <img src="img/enc_dec_sample_test_result.png" alt="Encoder Decoder test result" width="400" style="margin-right: 20px;">
+</p>
+
+Once the NODE training is complete, we can visualize it's training loss:
+
+<p align="center">
+  <img src="img/NODE_loss_tutorial.png" alt="NODE training loss" width="400" style="margin-right: 20px;">
+</p>
+
+We can again visualize the autoregressive predicted trajectory for a test point:
+
+<p align="center">
+  <img src="img/NODE_sample_test_result.png" alt="NODE sample test result" width="400" style="margin-right: 20px;">
+</p>
 
 Training curves: Enc Dec (train+test), NODE (train+test)
 Test trajectories: Enc dec, NODE

@@ -16,12 +16,30 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import time
 import shutil
+from typing import Any
 
 
 ##########################################################
 
 @jax.jit
-def _ode_fn(t,state,other_args):
+def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
+    """
+    Compute the right-hand side of the Neural ODE system.
+    
+    This function defines the dynamics of the system by computing derivatives
+    of the latent state variables. It applies scaling to improve numerical
+    stability as described in "Stiff Neural Ordinary Differential Equations"
+    by Kim, Ji et al.
+    
+    Args:
+        t (float): Current time point
+        state (jax.Array): Current state vector in latent space
+        other_args (dict[str, dict[str, Any]]): Dictionary containing constants,
+                                               trainable variables, and trajectory index
+                                               
+    Returns:
+        jax.Array: Derivatives of the state variables
+    """
 
     constants=other_args['constants']
     #scaling=constants['latent_scaling']
@@ -43,7 +61,27 @@ def _ode_fn(t,state,other_args):
     return jnp.squeeze(derivatives)
 
 @partial(jax.jit,static_argnums=(5,))
-def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj,max_traj_size):
+def _integrate_NODE(constants: dict[str,Any],trainable_variables_NODE: dict[str,jax.Array],enc_dec_weights:dict[str,jax.Array],data_dict:dict[str,jax.Array],i_traj:int,max_traj_size:int):
+    """
+    Integrate the Neural ODE system for a single trajectory.
+    
+    This function solves the initial value problem for the Neural ODE using
+    the Diffrax library. It handles the conversion between physical and
+    latent spaces, sets up the ODE solver with specified tolerances and
+    step size controls, and returns the solution trajectory.
+    
+    Args:
+        constants (dict[str, Any]): Dictionary containing ODE solver parameters
+                                   (pcoeff, icoeff, rtol, atol, init_dt, dtmin)
+        trainable_variables_NODE (dict[str, jax.Array]): Neural ODE network weights
+        enc_dec_weights (dict[str, jax.Array]): Encoder and decoder network weights
+        data_dict (dict[str, jax.Array]): Dictionary containing time data and initial conditions
+        i_traj (int): Index of the trajectory to integrate
+        max_traj_size (int): Maximum number of time steps for integration
+        
+    Returns:
+        diffrax.Solution: Solution object containing the integrated trajectory
+    """
 
     start_end_time_data=data_dict['start_end_time_data']
     initial_condition_data=data_dict['initial_condition_data']
@@ -104,7 +142,29 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
 
 
 @partial(jax.jit,static_argnums=(4,5,))
-def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size):
+def _loss_fn_NODE(constants:dict[str,Any],trainable_variables_NODE:dict[str,jax.Array],enc_dec_weights:dict[str,jax.Array],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
+    """
+    Compute the loss function for Neural ODE training.
+    
+    This function computes a multi-objective loss that combines:
+    1. Reconstruction loss in physical space (L1)
+    2. Latent space consistency loss (L3)
+    
+    The function handles integration failures gracefully by penalizing failed
+    trajectories with a high loss value. It uses vectorized operations over
+    multiple trajectories for efficient computation.
+    
+    Args:
+        constants (dict[str, Any]): Training constants and parameters
+        trainable_variables_NODE (dict[str, jax.Array]): Neural ODE network weights
+        enc_dec_weights (dict[str, jax.Array]): Encoder and decoder network weights
+        data_dict (dict[str, jax.Array]): Training data including masks and input data
+        num_traj (int): Number of trajectories to process
+        max_traj_size (int): Maximum trajectory size for integration
+        
+    Returns:
+        jax.Array: Combined loss value normalized by successful trajectory count
+    """
     
     # masks
     recon_mask=data_dict['recon_mask']
@@ -113,7 +173,7 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
     
     
     # Create a vectorized version of the single-trajectory loss computation
-    def single_trajectory_loss(i_traj):
+    def single_trajectory_loss(i_traj:int):
         recon_mask_curr=recon_mask[i_traj,:,:]
         latent_space_mask_curr=latent_space_mask[i_traj,:,:]
         phys_data=input_data[i_traj,:,:]
@@ -161,8 +221,43 @@ def _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,n
     return (loss_l1 + loss_l3) / (total_success)
 
 class Neural_ODE():
+    """
+    Neural Ordinary Differential Equation (NODE) class for learning dynamical systems.
+    
+    This class implements a Neural ODE that learns the dynamics of a system in
+    a learned latent space. It combines an encoder-decoder architecture with
+    a neural network that defines the right-hand side of the ODE system.
+    
+    The class supports both standalone NODE training and simultaneous training
+    with the encoder-decoder. It includes comprehensive testing, visualization,
+    and model persistence capabilities.
+    
+    Attributes:
+        config_handler (ConfigReader): Configuration handler for model parameters
+        data_processing_handler (Data_Processing): Handler for data processing operations
+        encoder_decoder_handler (Encoder_Decoder): Pre-trained encoder-decoder
+        logging_manager (LoggingManager): Manager for logging training progress
+        constants (dict): Training constants and ODE solver parameters
+        test_data_dict (dict): Test data for evaluation
+        test_constants (dict): Constants for testing
+        trainable_enc_dec (bool): Whether to train encoder-decoder simultaneously
+        NODE_object (MLP): Neural network defining the ODE dynamics
+    """
 
     def __init__(self,config_handler:ConfigReader,logging_manager:LoggingManager,data_processing_handler:Data_Processing,encoder_decoder_handler:Encoder_Decoder):
+        """
+        Initialize the Neural_ODE class.
+        
+        This method sets up the Neural ODE, configures ODE solver parameters,
+        initializes or loads model weights, trains the model if needed, and
+        optionally tests the model performance.
+        
+        Args:
+            config_handler (ConfigReader): Configuration handler for model parameters
+            logging_manager (LoggingManager): Manager for logging training progress
+            data_processing_handler (Data_Processing): Handler for data processing operations
+            encoder_decoder_handler (Encoder_Decoder): Pre-trained encoder-decoder
+        """
 
         # init
         self.config_handler=config_handler
@@ -245,12 +340,25 @@ class Neural_ODE():
                 self.visualize_results()
 
     def check_save_load_dirs(self):
+        """
+        Check and create necessary directories for saving and loading models.
+        
+        This method ensures that the model output directory and testing save directory
+        exist, creating them if they don't.
+        """
+
         if not os.path.isdir(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))):
             os.mkdir(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir")))
         if not os.path.isdir(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))):
             os.mkdir(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir")))
 
     def _init_optimizer(self):
+        """
+        Initialize the optimizer for training the Neural ODE.
+        
+        This method sets up the optimizer based on configuration settings.
+        Currently supports Adam with learning rate decay and L-BFGS optimizers.
+        """
 
         if self.config_handler.get_config_status("neural_ode.training.optimizer")=="adam":
 
@@ -269,6 +377,13 @@ class Neural_ODE():
             self.optimizer=optax.lbfgs()    
 
     def _init_network(self):
+        """
+        Initialize the Neural ODE network.
+        
+        This method creates an MLP network that defines the right-hand side
+        of the ODE system in the latent space. The network architecture is
+        configured based on the specified parameters.
+        """
 
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
         hidden_size_NODE=self.config_handler.get_config_status("neural_ode.architecture.network_width")
@@ -291,6 +406,14 @@ class Neural_ODE():
         #                                          'decoder':self.encoder_decoder_handler.decoder_object.weights})
 
     def _train_NODE(self):
+        """
+        Train the Neural ODE network.
+        
+        This method implements the main training loop for the Neural ODE.
+        It samples training data, computes gradients, updates network weights,
+        and tracks training progress including test performance. Training stops
+        if integration failures occur.
+        """
 
         self.logging_manager.log("Training NODE...")
         self.training_loss_values=[]
@@ -326,7 +449,22 @@ class Neural_ODE():
                 self.logging_manager.log(f"Training time for {self.print_freq} steps: {t2-t1} seconds")
                 t1=time.time()
 
-    def _train_step(self,opt_state,train_step):
+    def _train_step(self,opt_state:optax.OptState,train_step:int):
+        """
+        Execute a single training step.
+        
+        This method performs one iteration of training: samples data, computes
+        loss and gradients, updates network weights, and evaluates performance.
+        It handles integration failures and updates the best model weights.
+        
+        Args:
+            opt_state (optax.OptState): Current optimizer state
+            train_step (int): Current training step number
+            
+        Returns:
+            tuple: (updated_opt_state, success_flag) where success_flag indicates
+                   whether the integration succeeded (1) or failed (0)
+        """
 
         success=1
         # sample data
@@ -398,13 +536,43 @@ class Neural_ODE():
         return opt_state,success
 
 
-    def loss_fn(self,constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size):
+    def loss_fn(self,constants:dict[str,Any],trainable_variables_NODE:dict[str,jax.Array],enc_dec_weights:dict[str,jax.Array],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
+        """
+        Compute the loss function for Neural ODE training.
+        
+        This is a wrapper method that calls the JIT-compiled loss function
+        with the current parameters. It ensures max_traj_size is converted
+        to a Python int for compatibility.
+        
+        Args:
+            constants (dict[str, Any]): Training constants and parameters
+            trainable_variables_NODE (dict[str, jax.Array]): Neural ODE network weights
+            enc_dec_weights (dict[str, jax.Array]): Encoder and decoder network weights
+            data_dict (dict[str, jax.Array]): Training data including masks and input data
+            num_traj (int): Number of trajectories to process
+            max_traj_size(int): Maximum trajectory size for integration
+            
+        Returns:
+            jax.Array: Computed loss value
+        """
+
         max_traj_size=int(max_traj_size)
         return _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size)
 
     # predict solution trajectories
-    def test_NODE_model(self,enc_weights,dec_weights,NODE_weights):
-
+    def test_NODE_model(self,enc_weights:jax.Array,dec_weights:jax.Array,NODE_weights:jax.Array):
+        """
+        Test the Neural ODE model on test data.
+        
+        This method evaluates the trained Neural ODE by integrating trajectories
+        for all test data and comparing predictions with ground truth. It handles
+        integration failures gracefully and saves predictions for later analysis.
+        
+        Args:
+            enc_weights (jax.Array): Encoder network weights
+            dec_weights (jax.Array): Decoder network weights
+            NODE_weights (jax.Array): Neural ODE network weights
+        """
 
         node_weights_dict={'NODE':NODE_weights}
         enc_dec_weights={'encoder':enc_weights,'decoder':dec_weights}
@@ -476,19 +644,40 @@ class Neural_ODE():
         
     # save neural ODE weights out
     def save_NODE_weights(self):
-
+        """
+        Save the trained Neural ODE model to disk.
+        
+        This method serializes the Neural ODE object using pickle
+        and saves it to the configured model output directory.
+        """
 
         with open(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path")),'wb') as f:
 
             pickle.dump(self.NODE_object,f,pickle.HIGHEST_PROTOCOL)
 
     def load_NODE_weights(self):
+        """
+        Load pre-trained Neural ODE model from disk.
+        
+        This method deserializes the Neural ODE object from pickle
+        files and loads it into the current instance.
+        """
         
         with open(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path")),'rb') as f:
 
             self.NODE_object=pickle.load(f)
 
-    def save_predictions(self,predictions_list,true_list):
+    def save_predictions(self,predictions_list:dict[str,list[np.ndarray]],true_list:dict[str,list[np.ndarray]]):
+        """
+        Save prediction results to disk.
+        
+        This method saves both predicted and true values to pickle files
+        for later analysis and visualization.
+        
+        Args:
+            predictions_list (dict[str, list[np.ndarray]]): Dictionary containing predicted values
+            true_list (dict[str, list[np.ndarray]]): Dictionary containing true values
+        """
 
         with open(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("predictions.pkl"),'wb') as f:
 
@@ -499,12 +688,28 @@ class Neural_ODE():
             pickle.dump(true_list,f,pickle.HIGHEST_PROTOCOL)
 
     def load_predictions(self):
+        """
+        Load previously saved prediction results from disk.
+        
+        This method loads prediction results from pickle files
+        for analysis or visualization.
+        
+        Returns:
+            dict: Loaded prediction results
+        """
 
         with open(Path(self.config_handler.get_config_status("neural_ode.testing.predictions_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.testing.predictions_output_path")),'rb') as f:
 
             return pickle.load(f)
 
     def visualize_results(self):
+        """
+        Create visualization plots for test results.
+        
+        This method generates comparison plots between predicted and true values
+        for each test trajectory and input feature. Plots are saved to the
+        configured visualization directory.
+        """
 
         viz_dir=Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path(self.config_handler.get_config_status("neural_ode.testing.visualization.save_dir"))
         if os.path.isdir(viz_dir):
