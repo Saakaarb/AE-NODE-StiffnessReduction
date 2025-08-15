@@ -7,17 +7,31 @@ import os
 import jax
 from pathlib import Path
 import mlflow
+import argparse
+import sys
 
 if __name__=="__main__":
 
-
-
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description='Train Autoencoder Neural ODE with stiffness reduction')
+    parser.add_argument('--config', '-c', type=str, default='config/config.yml',
+                       help='Path to configuration file (default: config/config.yml)')
+    
+    # Parse arguments
+    args = parser.parse_args()
+    
+    # Check if config file exists
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"Error: Config file '{config_path}' not found!")
+        print(f"Please provide a valid path or use the default 'config/config.yml'")
+        sys.exit(1)
+    
+    print(f"Using config file: {config_path}")
     print(jax.devices())
     # roll all information into a constants dictionary
     constants={}
     data_dict={}
-
-    config_path=Path("config/config.yml")
 
     config_handler=ConfigReader(str(config_path))
 

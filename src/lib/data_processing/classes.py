@@ -725,6 +725,10 @@ class Data_Processing():
                             compression='gzip', compression_opts=9)
             f.create_dataset('all_time_data_broadcasted_test', data=self.all_time_data_broadcasted_test, 
                             compression='gzip', compression_opts=9)
+            f.create_dataset('cond_1_mask_test', data=self.cond_1_mask_test, 
+                            compression='gzip', compression_opts=9)
+            f.create_dataset('cond_2_mask_test', data=self.cond_2_mask_test, 
+                            compression='gzip', compression_opts=9)
 
         # log to mlflow
         mlflow.log_artifact(os.path.join(data_dir, 'training_data.h5'), "training_data")
@@ -795,6 +799,8 @@ class Data_Processing():
 
             self.recon_mask_test = f['recon_mask_test'][:]
             self.latent_space_mask_test = f['latent_space_mask_test'][:]
+            self.cond_1_mask_test = f['cond_1_mask_test'][:]
+            self.cond_2_mask_test = f['cond_2_mask_test'][:]
             self.all_time_data_broadcasted_test = f['all_time_data_broadcasted_test'][:]
 
             self.num_test_traj = f.attrs['num_test_traj']
