@@ -1,66 +1,61 @@
 # Introduction
-Autoencoder Neural Ordinary Differential Equations (NODE) with stiffness reduction for surrogate modeling of stiff and irregular time series data.
+
+(add license and dependency information)
+Autoencoder Neural Ordinary Differential Equations (NODE) with dimension reduction and stiffness reduction for surrogate modeling of stiff and irregular time series data. This repository is a GPU-efficient open-source implementation of NODEs for irregularly sampled time series (with potentially different trajectory lengths) data with dimension reduction and stiffness reduction techniques.
+
+# Value Proposition
+
+ Modeling of irregularly-sampled time series data that may exhibit stiffness characteristics (for eg. multiple, order-of-magnitude different time scales of feature evolution) is an open and challenging problem. For example, hydrocarbon combustion models are a system of very stiff ODEs. The cost of solving these stiff ODEs at every node (measuring in millions) in a large simulation is prohibitive. A surrogate model that can accurately make predictions in a stiffness reduced manifold is exceptionally useful to use in place of the full equation system while simulating, reducing the cost of integration by order of magnitude.
+
+Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. In particular, Neural ODEs have been used in a wide variety of scientific applications, combining data driven modeling and scientific computing techniques. However, they are autoregressive models, and come with training challenges, from both a stability and efficiency perspective:
+
+    1.  They can be difficult to train on long time horizons, or on datasets with features exhibiting stiff behavior, as their rollouts can become unstable and diverge.
+
+    2. They are also nontrivial to effectively parallelize on a GPU, given their autoregressive nature. 
+
+# Installation
+
+# Key Features
+
+1. Encoder-NODE-Decoder architecture: The integration in time is transformed to a reduced-dimension latent space via an encoder-decoder architecture. The time integration is then performed by the NODE. This improves the training effectiveness of the NODE. The NODE is trained to integrate the latent, stiffness reduced system using explicit integration schemes. (add images)
+
+2. A stiffness reduction regularization can be used while training the encoder-decoder, to reduce the stiffness of the latent space. This enables lower cost integration in the latent space as smaller steps need to be taken. The methodology is adapted from [3]. In summary, (add info on stiffness reduction)
+
+3. Effective GPU utilization: The framework efficiently can handle on GPU staggered trajectories (trajectories of unequal length), as is common in many applications involving time series data. This is done by a combination of masking and vectorizing strategies to reduce memory latency, H2D transfers and maximize GPU occupancy. (add images showing how masking and vectorization is done)
+
+4. Can be used on time series data in any timescale range (nanoseconds to seconds); utilizes several scaling and normalization tricks and conventions, some of which are discussed in [5].
+
+5. Built in MLFlow tracking of experimental settings, results and artifacts. 
+
+# Getting Started
+
+1. Collect dataset:
+
+2. Setup config file
+
+3. Run the script: 
 
 
-This repository is a GPU-efficient open-source implementation of NeuralODE for irregularly sampled time series data with stiffness reduction techniques. Surrogate modeling of time series data that exhibits stiffness characteristics (for eg. multiple, order-of-magnitude different time scales) is an open and challenging problem. An example domain where this problem is very prevalent is combustion modeling, where reactions are governed by stiff Ordinary Differential equations. The cost of solving these stiff ODEs at every node in a large simulation is prohibitive. 
+# Best Practices
 
-Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. However, Neural ODEs come with training challenges
+Listed below are some best practices to avoid pitfalls for training Neural ODEs, using this framework or in general:
 
-# Methodology
+1. Train the encoder-decoder to as low an error as possible; incorrect encoder-decoder predictions cause NODE training  to fail quickly.
 
-
-Features:
-
-Experiment and data tracking
-    - Experiment tracking via mlflow
-    - data version tracking via DVC
-
-Supports trajectories of unequal lengths, at very small time scales(final time must be same)
-
-Data normalization
-    - Done on training data, avoids test data to avoid data leakage
-
-Encoder to change physical space to a "stiffness reduced" and dimension reduced latent space
-    - Includes a latent space stiffness reduction term. can be turned off by setting the weight (stiffness reduction weight) to 0
-    - 
-Neural ODE to step through time, backpropagating gradients in this latent space
-    - diffrax
-    - Heun stepping
-    - handles failure
-    - vmap based parallelization of NODE training
-decoder to change back to physical space
-Scaling to alleviate training issues
-    - automated input normalization
-    - Automated scaling of NODE inputs and outputs
-GPU optimized implementation
-    - Minimal H2D transfers
-
-supports any dataset; see config file
-controlled from config file
-
-TODO:
-Further GPU optimization
-    - Setup prefetch
-    - Check data memory requirements, compare with GPU mem, and accordingly change sampling strategy
-tests
-equinox based models
-scaling of latent space inputs
-
-Tips:
-
-1. Train encoder decoder for a while, to as low a loss as possible; unstable enc dec causes NODE failure quite quickly
 2. You have the option of selecting which rows/columns to include in the training set. Make sure all features 
-   that are causative are included in the training data. For example, if modeling a chemical reaction, by not including the temperature, the network cannot learn the appropriate cause effect relationships from data and this will result
-   in a poor model
-3. The init_dt is kept constant (for now, this package uses only explicit euler training). Make sure this init_dt is     small enough to capture the smallest timescale of your system. Else it will result in poor models
+   that are causative are included in the training data. For example, if modeling a chemical reaction, by not including the temperature, the network cannot learn the appropriate cause effect relationships from data and this will result in a poor model.
 
-4. try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
-5. Ensure the batch size is small enough such that it plus computations can fit on device
-6. Do not have long tails in training trajectories where no "kinetics" or actions occur. For example, while simulating a combustion reaction, for every training trajectory if the reaction is complete in a maximum of ~10^(-4) seconds, do not use data lasting upto 10^(-2) seconds. This creates a long tailed trajectory where the NODE must learn to predict 0 (which it does not do effectively) and also reduces the effectiveness of scaling tricks borrowed from [5].
-7. If the system timescale is very small (max time < 10^(-7)), always use fp64 training (set in config: neural_ode.training.precision) instead of fp32. 
-8. When training the encoder-decoder with stiffness reduction, play around with the value of the stiffness reduction coefficient by observing the relative magnitude of "test error" and "test cond loss" printed while training. "test error" and "stiffness_reduction_weight*test_cond_loss" should be roughly the same O.O.M for effective training.
+3. Do not have long tails in training trajectories where no "kinetics" or actions occur. For example, while simulating a combustion reaction, for every training trajectory if the reaction is complete in a maximum of ~10^(-4) seconds, do not use data lasting upto 10^(-2) seconds. This creates a long tailed trajectory where the NODE must learn to predict 0 (which it does not do effectively) and also reduces the effectiveness of critical scaling tricks borrowed from [5]. (add images)
 
-This repo leverages techniques and ideas from the following works:
+4. If the system timescale is very small (max time < 10^(-7)), always use fp64 training (set in config: neural_ode.training.precision) instead of fp32. This is because of a (current) known issue in diffrax (issue #660). If the time scale of the system are larger, use fp32 for faster, more efficient training.
+
+5. When training the encoder-decoder with stiffness reduction, play around with the value of the stiffness reduction coefficient by observing the relative magnitude of "test error" and "test cond loss" printed while training. "test error" and "stiffness_reduction_weight*test_cond_loss" should be roughly the same O.O.M for effective training.
+
+6. Try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
+
+# Acknowledgements
+
+This repo leverages techniques, ideas and APIs from the following works:
 
 1. ChemNODE: A neural ordinary differential equations framework for efficient chemical kinetic solvers (link:  https://www.sciencedirect.com/science/article/pii/S2666546821000677)
 
@@ -74,13 +69,22 @@ This repo leverages techniques and ideas from the following works:
 
 6. Neural Ordinary Differential Equations (Link: https://arxiv.org/abs/1806.07366)
 
-# Installation
+7. On Neural Differential Equations (Link: https://arxiv.org/abs/2202.02435)
 
-# Credits
+# Detailed Descriptions
 
-# Directory Structure
+## Directory Structure
 
-# Input data structure
+## Input data structure
 
-# Tutorial
+## Tutorial
 
+
+# Improvements to come
+
+Further GPU optimization
+    - Setup prefetch
+    - Check data memory requirements, compare with GPU mem, and accordingly change sampling strategy
+tests
+equinox based models
+scaling of latent space inputs
