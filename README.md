@@ -154,15 +154,13 @@ Once the NODE training is complete, we can visualize it's training loss:
   <img src="img/NODE_loss_tutorial.png" alt="NODE training loss" width="400" style="margin-right: 20px;">
 </p>
 
-We can again visualize the autoregressive predicted trajectory for a test point:
+We can again visualize the autoregressive predicted trajectory for a test point. The predictions are somewhat off for some of the features; this can be improved by a hyperparameter sweep, longer training, and more strategic sampling of data (currently, the data is randomly sampled). The script to generate the data is present in /tutorial
 
 <p align="center">
   <img src="img/NODE_sample_test_result.png" alt="NODE sample test result" width="400" style="margin-right: 20px;">
 </p>
 
-Training curves: Enc Dec (train+test), NODE (train+test)
-Test trajectories: Enc dec, NODE
-Stiffness reduction curve
+A critical feature of this repository is the stiffness reduction technique discussed in previous sections.
 
 # Best Practices
 
