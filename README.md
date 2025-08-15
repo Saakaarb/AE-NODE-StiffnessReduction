@@ -21,24 +21,24 @@ Recent works have leveraged machine learning to create models that reduce the co
 
 2. A stiffness reduction regularization can be used while training the encoder-decoder, to reduce the stiffness of the latent space. This enables lower cost integration in the latent space as larger steps can to be taken. The methodology is adapted from [3]. In summary, for a latent space z the following regularization term is added to the encoder-decoder training:
 
-$$
+```math
 R([z_0 \dots z_T], [t_0 \dots t_T]) = \bar{\kappa}(P) = \frac{1}{T - 2} \sum_{t=1}^{T-1} \frac{\left\lVert \delta \frac{dz}{dt} \right\rVert}{\lVert \delta z \rVert}
-$$
+```
 
 where
 
-$$
+```math
 \left\lVert \delta \left( \frac{dz}{dt} \right) \right\rVert =
 \left\lVert
 \left( \frac{z_{t_{i+1}} - z_{t_i}}{t_{i+1} - t_i} \right)
 -
 \left( \frac{z_{t_i} - z_{t_{i-1}}}{t_i - t_{i-1}} \right)
 \right\rVert
-$$
+```
 
-$$
+```math
 \lVert \delta z \rVert = \lVert z_{i+1} - z_{i-1} \rVert
-$$
+```
 
 3. Effective GPU utilization: The framework efficiently can handle staggered trajectories (trajectories of unequal length) on GPU, as it is common in many applications involving time series data to have staggered, non-uniformly sampled trajectories. This is done by a combination of masking and vectorizing strategies to reduce memory latency, H2D transfers and maximize GPU occupancy. (add images showing how masking and vectorization is done)
 
@@ -51,15 +51,15 @@ $$
 To demonstrate the utility of the framework, we will create a model that learns to autoregressively predict the results of a hydrocarbon combustion process. The reaction under consideration is a 2 step combustion of a methane-like fuel F:
 
 1. **Fuel oxidation:**  
-   $$
+   ```math
    \mathrm{F} + 1.5\ \mathrm{O_2} \ \xrightarrow{k_1}\ \mathrm{CO} + 2\ \mathrm{H_2O}
-   $$
+   ```
    $k_1 = A_1 e^{-E_1/(RT)},\quad A_1 = 1.0\times 10^6\ \mathrm{s^{-1}},\quad E_1 = 6.0\times 10^4\ \mathrm{J\,mol^{-1}}$
 
 2. **CO oxidation:**  
-   $$
+   ```math
    \mathrm{CO} + 0.5\ \mathrm{O_2} \ \xrightarrow{k_2}\ \mathrm{CO_2}
-   $$
+   ```
    $k_2 = A_2 e^{-E_2/(RT)},\quad A_2 = 5.0\times 10^5\ \mathrm{s^{-1}},\quad E_2 = 4.0\times 10^4\ \mathrm{J\,mol^{-1}}$
 
 1. Step 1: Gather 
