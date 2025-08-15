@@ -91,7 +91,7 @@ def _integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict
     #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=True,
     #                                max_steps=600)
 
-    solution = diffrax.diffeqsolve(term,diffrax.Dopri8(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
+    solution = diffrax.diffeqsolve(term,diffrax.Heun(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
                                     max_steps=max_traj_size-1,stepsize_controller=stepsize_controller)
     #jax.debug.print("solution.ts: {x}, curr_time_data: {y}",x=solution.ts,y=curr_time_data)

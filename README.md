@@ -17,7 +17,11 @@ Recent works have leveraged machine learning to create models that reduce the co
 
 # Key Features
 
-1. Encoder-NODE-Decoder architecture: The integration in time is transformed to a reduced-dimension latent space via an encoder-decoder architecture. The time integration is then performed by the NODE. This improves the training effectiveness of the NODE. The NODE is trained to integrate the latent, stiffness reduced system using explicit integration schemes. (add images)
+1. Encoder-NODE-Decoder architecture: The integration in time is transformed to a reduced-dimension latent space via an encoder-decoder architecture. The time integration is then performed by the NODE. This improves the training effectiveness of the NODE. The NODE is trained to integrate the latent, stiffness reduced system using explicit integration schemes. 
+
+<p align="center">
+  <img src="img/enc_dec_final.png" alt="Encoder-NODE-Decoder Architecture" width="600">
+</p>
 
 2. A stiffness reduction regularization can be used while training the encoder-decoder, to reduce the stiffness of the latent space. This enables lower cost integration in the latent space as larger steps can to be taken. The methodology is adapted from [3]. In summary, for a latent space z the following regularization term is added to the encoder-decoder training:
 
@@ -42,6 +46,12 @@ where
 
 3. Effective GPU utilization: The framework efficiently can handle staggered trajectories (trajectories of unequal length) on GPU, as it is common in many applications involving time series data to have staggered, non-uniformly sampled trajectories. This is done by a combination of masking and vectorizing strategies to reduce memory latency, H2D transfers and maximize GPU occupancy. (add images showing how masking and vectorization is done)
 
+<p align="center">
+  <img src="img/pred_matrix_autoencoder.png" alt="Autoencoder Prediction Matrix" width="400" style="margin-right: 20px;">
+  <img src="img/mask_autoencoder.png" alt="Autoencoder Masking Strategy" width="400">
+</p>
+
+
 4. Can be used on time series data in any timescale range (nanoseconds to seconds); utilizes several scaling and normalization tricks and conventions, some of which are discussed in [5].
 
 5. Built in MLFlow tracking of experimental settings, results and artifacts. 
@@ -54,15 +64,34 @@ To demonstrate the utility of the framework, we will create a model that learns 
    ```math
    \mathrm{F} + 1.5\ \mathrm{O_2} \ \xrightarrow{k_1}\ \mathrm{CO} + 2\ \mathrm{H_2O}
    ```
-   $k_1 = A_1 e^{-E_1/(RT)},\quad A_1 = 1.0\times 10^6\ \mathrm{s^{-1}},\quad E_1 = 6.0\times 10^4\ \mathrm{J\,mol^{-1}}$
+   ```math
+   k_1 = A_1 e^{-E_1/(RT)},\quad A_1 = 1.0\times 10^6\ \mathrm{s^{-1}},\quad E_1 = 6.0\times 10^4\ \mathrm{J\,mol^{-1}}
+   ```
 
 2. **CO oxidation:**  
    ```math
    \mathrm{CO} + 0.5\ \mathrm{O_2} \ \xrightarrow{k_2}\ \mathrm{CO_2}
    ```
-   $k_2 = A_2 e^{-E_2/(RT)},\quad A_2 = 5.0\times 10^5\ \mathrm{s^{-1}},\quad E_2 = 4.0\times 10^4\ \mathrm{J\,mol^{-1}}$
+   ```math
+   k_2 = A_2 e^{-E_2/(RT)},\quad A_2 = 5.0\times 10^5\ \mathrm{s^{-1}},\quad E_2 = 4.0\times 10^4\ \mathrm{J\,mol^{-1}}
+   ```
 
-1. Step 1: Gather 
+## Step 1: Training Data
+
+The training data is in tutorial/tutorial_data. It is in row_major format
+
+## Step 2: Configuration file
+
+The config file is in tutorial/tutorial_config.yml. Look through it to see the settings being used
+
+## Step 3: Running the training
+
+To run the training, run the following command:
+
+```math
+python driver_script -c "tutorial/tutorial_config.yml"
+```
+## Step 4: Results 
 
 
 # Best Practices
@@ -104,16 +133,44 @@ This repo leverages techniques, ideas and APIs from the following works:
 
 ## Directory Structure
 
+The directory structure of this repo. Some other dirs may be created during running, depending on user provided paths.
+
+```
+AE-NODE-StiffnessReduction/
+├── config/                 # Configuration files
+├── img/                    # Images and figures
+├── logs/                   # Training and execution logs
+├── mlruns/                 # MLFlow experiment tracking
+├── src/                    # Source code
+│   ├── lib/               # Core library modules
+│   │   ├── autoencoder/   # Autoencoder implementation
+│   │   ├── data_processing/ # Data handling and preprocessing
+│   │   └── NODE/         # Neural ODE implementation
+│   └── utils/             # Utility functions and helpers
+├── tutorial/               # Tutorial examples and configurations
+├── driver_script.py        # Main execution script
+├── README.md              # This documentation file
+└── requirements.txt        # Python dependencies
+```
+
 ## Input data structure
 
-## Tutorial
+Shown below is a sample, row major input file (.txt). The first row is time, and subsequent rows are input features:
+
+```math
+0.000000000000000000e+00,8.347245409015025696e-06,1.669449081803005139e-05, .....
+5.621780831931537381e-02,5.309955140219043551e-02,4.986923398327756940e-02, .....
+2.099999999999999922e-01,2.004625121967271439e-01,1.901642741624996469e-01, .....
+0.000000000000000000e+00,5.084576623539984776e-03,9.620111670793017253e-03, .....
+0.000000000000000000e+00,5.667543360302558552e-04,2.303644030980522492e-03, .....
+1.290142861281983187e+03,1.330740917367549628e+03,1.376281295596508699e+03, .....
+
+```
 
 
 # Improvements to come
 
-Further GPU optimization
-    - Setup prefetch
-    - Check data memory requirements, compare with GPU mem, and accordingly change sampling strategy
-tests
-equinox based models
-scaling of latent space inputs
+- Further GPU optimization
+- Tests
+- Equinox based models
+- Scaling of latent space inputs
