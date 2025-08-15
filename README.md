@@ -9,9 +9,9 @@ Autoencoder Neural Ordinary Differential Equations (NODE) with dimension reducti
 
 Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. In particular, Neural ODEs have been used in a wide variety of scientific applications, combining data driven modeling and scientific computing techniques. However, they are autoregressive models, and come with training challenges, from both a stability and efficiency perspective:
 
-    1.  They can be difficult to train on long time horizons, or on datasets with features exhibiting stiff behavior, as their rollouts can become unstable and diverge.
+1.  They can be difficult to train on long time horizons, or on datasets with features exhibiting stiff behavior, as their rollouts can become unstable and diverge.
 
-    2. They are also nontrivial to effectively parallelize on a GPU, given their autoregressive nature. 
+2. They are also nontrivial to effectively parallelize on a GPU, given their autoregressive nature. 
 
 # Installation
 
@@ -44,10 +44,10 @@ where
 \lVert \delta z \rVert = \lVert z_{i+1} - z_{i-1} \rVert
 ```
 
-3. Effective GPU utilization: The framework efficiently can handle staggered trajectories (trajectories of unequal length) on GPU, as it is common in many applications involving time series data to have staggered, non-uniformly sampled trajectories. This is done by a combination of masking and vectorizing strategies to reduce memory latency, H2D transfers and maximize GPU occupancy. (add images showing how masking and vectorization is done)
+3. Effective GPU utilization: The framework efficiently can handle staggered trajectories (trajectories of unequal length) on GPU, as it is common in many applications involving time series data to have staggered, non-uniformly sampled trajectories. This is done by a combination of masking and vectorizing strategies to reduce memory latency, H2D transfers and maximize GPU occupancy. Shown below is an example of using a mask to remove extra predictions on irregularly sampled, non uniform trajectories; the hadamard product of the two ensures physicality while allowing vectorization.
 
 <p align="center">
-  <img src="img/pred_matrix_autoencoder.png" alt="Autoencoder Prediction Matrix" width="400" style="margin-right: 20px;">
+  <img src="img/pred_matrix_autoenc.png" alt="Autoencoder Prediction Matrix" width="400" style="margin-right: 20px;">
   <img src="img/mask_autoencoder.png" alt="Autoencoder Masking Strategy" width="400">
 </p>
 
@@ -81,12 +81,12 @@ To demonstrate the utility of the framework, we will create a model that learns 
 The training data is in tutorial/tutorial_data. It is in row_major format. Sample is shown below:
 
 ```math
-0.000000000000000000e+00,8.347245409015025696e-06,1.669449081803005139e-05, ..... 
-5.621780831931537381e-02,5.309955140219043551e-02,4.986923398327756940e-02, ..... 
-2.099999999999999922e-01,2.004625121967271439e-01,1.901642741624996469e-01, ..... 
-0.000000000000000000e+00,5.084576623539984776e-03,9.620111670793017253e-03, ..... 
-0.000000000000000000e+00,5.667543360302558552e-04,2.303644030980522492e-03, ..... 
-1.290142861281983187e+03,1.330740917367549628e+03,1.376281295596508699e+03, ..... 
+0.000000000000000000e+00,8.347245409015025696e-06,1.669449081803005139e-05, ..... <br>
+5.621780831931537381e-02,5.309955140219043551e-02,4.986923398327756940e-02, ..... <br>
+2.099999999999999922e-01,2.004625121967271439e-01,1.901642741624996469e-01, ..... <br>
+0.000000000000000000e+00,5.084576623539984776e-03,9.620111670793017253e-03, ..... <br>
+0.000000000000000000e+00,5.667543360302558552e-04,2.303644030980522492e-03, ..... <br>
+1.290142861281983187e+03,1.330740917367549628e+03,1.376281295596508699e+03, ..... <br>
 ```
 
 ## Step 2: Configuration file
@@ -97,7 +97,7 @@ The config file is in tutorial/tutorial_config.yml. Look through it to see the s
 
 To run the training, run the following command:
 
-```math
+```
 python driver_script -c "tutorial/tutorial_config.yml"
 ```
 ## Step 4: Results 
