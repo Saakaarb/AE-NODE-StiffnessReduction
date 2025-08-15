@@ -83,7 +83,7 @@ neural_ode:
 
         precision: 'float64' # 'float32' or 'float64'
                              # if the time scale of the system is very small (< 1E-7), use float64
-                             # else diffrax will perform poorly
+                             # based on a known issue #660 with diffrax
 
 
         # batch processing

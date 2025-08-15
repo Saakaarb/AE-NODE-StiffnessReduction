@@ -156,7 +156,7 @@ class Data_Processing():
         for i_traj,data_file in enumerate(self.train_data_files_list):
             data=np.genfromtxt(data_file,delimiter=',')
 
-            #TODO this is a custom preprocessing function for the data
+            
             # outputs: time_data(Nts,),feature_data(Nfeat,Nts)
             time_data,feature_data=process_raw_data(data,self.config_handler)
 
