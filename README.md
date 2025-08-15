@@ -123,6 +123,9 @@ python driver_script -c "tutorial/tutorial_config.yml"
 ```
 ## Step 4: Results 
 
+Training curves: Enc Dec (train+test), NODE (train+test)
+Test trajectories: Enc dec, NODE
+Stiffness reduction curve
 
 # Best Practices
 
