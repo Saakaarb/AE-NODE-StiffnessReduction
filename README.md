@@ -78,7 +78,16 @@ To demonstrate the utility of the framework, we will create a model that learns 
 
 ## Step 1: Training Data
 
-The training data is in tutorial/tutorial_data. It is in row_major format
+The training data is in tutorial/tutorial_data. It is in row_major format. Sample is shown below:
+
+```math
+0.000000000000000000e+00,8.347245409015025696e-06,1.669449081803005139e-05, ..... 
+5.621780831931537381e-02,5.309955140219043551e-02,4.986923398327756940e-02, ..... 
+2.099999999999999922e-01,2.004625121967271439e-01,1.901642741624996469e-01, ..... 
+0.000000000000000000e+00,5.084576623539984776e-03,9.620111670793017253e-03, ..... 
+0.000000000000000000e+00,5.667543360302558552e-04,2.303644030980522492e-03, ..... 
+1.290142861281983187e+03,1.330740917367549628e+03,1.376281295596508699e+03, ..... 
+```
 
 ## Step 2: Configuration file
 
@@ -129,9 +138,7 @@ This repo leverages techniques, ideas and APIs from the following works:
 
 7. On Neural Differential Equations (Link: https://arxiv.org/abs/2202.02435)
 
-# Detailed Descriptions
-
-## Directory Structure
+# Directory Structure
 
 The directory structure of this repo. Some other dirs may be created during running, depending on user provided paths.
 
@@ -152,21 +159,6 @@ AE-NODE-StiffnessReduction/
 ├── README.md              # This documentation file
 └── requirements.txt        # Python dependencies
 ```
-
-## Input data structure
-
-Shown below is a sample, row major input file (.txt). The first row is time, and subsequent rows are input features:
-
-```math
-0.000000000000000000e+00,8.347245409015025696e-06,1.669449081803005139e-05, .....
-5.621780831931537381e-02,5.309955140219043551e-02,4.986923398327756940e-02, .....
-2.099999999999999922e-01,2.004625121967271439e-01,1.901642741624996469e-01, .....
-0.000000000000000000e+00,5.084576623539984776e-03,9.620111670793017253e-03, .....
-0.000000000000000000e+00,5.667543360302558552e-04,2.303644030980522492e-03, .....
-1.290142861281983187e+03,1.330740917367549628e+03,1.376281295596508699e+03, .....
-
-```
-
 
 # Improvements to come
 
