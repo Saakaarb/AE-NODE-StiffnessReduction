@@ -3,7 +3,7 @@ data_processing:
     saving_loading:
         load_data: False # True/False
         save_data: True # True/False
-        raw_data_path: "raw_data/larger_script_data"
+        raw_data_path: "raw_data/script_data"
         processed_data_path: "processed_data"
 
     # data processing information
@@ -44,7 +44,7 @@ encoder_decoder:
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
         # experimental settings
-        stiffness_reduction: True # yes/no
+        stiffness_reduction: False # yes/no
         simultaneous_training: False # True/False
 
         # loss function
