@@ -145,7 +145,7 @@ After the training is complete, the training curves and resulting predictions ca
 We can visualize how effectively the encoder-decoder is able to encode the physical space in the latent space, by passing a test point through the encoder-decoder architecture and comparing to the truth:
 
 <p align="center">
-  <img src="img/enc_dec_sample_test_result.png" alt="Encoder Decoder test result" width="400" style="margin-right: 20px;">
+  <img src="img/enc_dec_sample_test_result.png" alt="Encoder Decoder test result" width="600" style="margin-right: 20px;">
 </p>
 
 Once the NODE training is complete, we can visualize it's training loss:
@@ -157,10 +157,66 @@ Once the NODE training is complete, we can visualize it's training loss:
 We can again visualize the autoregressive predicted trajectory for a test point. The predictions are somewhat off for some of the features; this can be improved by a hyperparameter sweep, longer training, and more strategic sampling of data (currently, the data is randomly sampled). The script to generate the data is present in /tutorial
 
 <p align="center">
-  <img src="img/NODE_sample_test_result.png" alt="NODE sample test result" width="400" style="margin-right: 20px;">
+  <img src="img/NODE_sample_test_result.png" alt="NODE sample test result" width="600" style="margin-right: 20px;">
 </p>
 
-A critical feature of this repository is the stiffness reduction technique discussed in previous sections.
+## Stiffness Reduction
+
+A critical feature of this repository is the stiffness reduction technique discussed in previous sections. To demonstrate this capability, a more stiff problem is considered:
+
+This script models two parallel exothermic combustion reactions using Arrhenius kinetics:
+
+1. **Methane oxidation (complete combustion):**
+
+```math
+\mathrm{CH_4 + 2\,O_2 \;\;\rightarrow\;\; CO_2 + 2\,H_2O}
+```
+
+with rate expression:
+
+```math
+r_1 = A_1 \, e^{-E_{a1}/(RT)} \,[\mathrm{CH_4}] \,[\mathrm{O_2}]^2
+```
+
+---
+
+2. **Hydrogen oxidation:**
+
+```math
+\mathrm{H_2 + \tfrac{1}{2}\,O_2 \;\;\rightarrow\;\; H_2O}
+```
+
+with rate expression:
+
+```math
+r_2 = A_2 \, e^{-E_{a2}/(RT)} \,[\mathrm{H_2}] \,[\mathrm{O_2}]
+```
+
+---
+
+- \( \mathrm{N_2} \) is treated as inert.  
+
+This system is much stiffer; this can be seen by the solution time scale:
+
+<p align="center">
+  <img src="img/stiff_sample.png" alt="Stiffness comparison" width="600" style="margin-right: 20px;">
+</p>
+
+On running an experiment with and without the stiffness regularization discussed above for this experiment, we can plot this and see the value of the stiffness approximation metric:
+
+<p align="center">
+  <img src="img/condition_comparison.png" alt="Stiffness comparison" width="600" style="margin-right: 20px;">
+</p>
+
+
+The corresponding latent space solution can be plotted with time, and it is easy to see that it is possible in the left case for an ODE integrator to take larger steps, since the solution changes more slowly with time, compared to the right case.
+
+<p align="center">
+  <img src="img/no_stiffred_latent.png" alt="No stiffness reduction latent space" width="400" style="margin-right: 20px;">
+  <img src="img/stiffred_latent.png" alt="Stiffness reduction latent space" width="400">
+</p>
+
+
 
 # Best Practices
 
