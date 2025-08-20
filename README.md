@@ -209,7 +209,7 @@ On running an experiment with and without the stiffness regularization discussed
 </p>
 
 
-The corresponding latent space solution can be plotted with time, and it is easy to see that it is possible in the left case for an ODE integrator to take larger steps, since the solution changes more slowly with time, compared to the right case.
+The corresponding latent space solution can be plotted with time, and it is easy to see that it is possible in the right case for an ODE integrator to take larger steps, since the solution changes more slowly with time, compared to the left case.
 
 <p align="center">
   <img src="img/no_stiffred_latent.png" alt="No stiffness reduction latent space" width="400" style="margin-right: 20px;">
