@@ -5,7 +5,7 @@ import jax.random as jr
 import random
 import mlflow
 import equinox
-from src.utils.classes import ConfigReader, VMapMLP
+from src.utils.classes import ConfigReader, VMapMLP,LoggingManager
 
 # for the system created by the script 2_eq_system.py
 
@@ -22,19 +22,38 @@ from src.utils.classes import ConfigReader, VMapMLP
 
 #     return interm_comp
 
-def create_network_instance(network_sizes:list,config_handler:ConfigReader)->equinox.Module:
+def get_activation_function(activation_function:str):
 
-    if config_handler.get_config_status('encoder_decoder.architecture.network_type')=='mlp':
+    if activation_function=='relu':
+        return jax.nn.relu
+    elif activation_function=='gelu':
+        return jax.nn.gelu
+    elif activation_function=='tanh':
+        return jax.nn.tanh
+    else:
+        raise ValueError(f"Activation function {activation_function} not supported")
+
+def create_network_instance(network_sizes:list,config_handler:ConfigReader,logging_manager:LoggingManager,model_string:str)->equinox.Module:
+
+    if config_handler.get_config_status(f'{model_string}.architecture.network_type')=='mlp':
 
         input_size=network_sizes[0]
         output_size=network_sizes[-1]
         hidden_size=network_sizes[1]
-        num_layers=config_handler.get_config_status('encoder_decoder.architecture.num_layers')
+        num_layers=config_handler.get_config_status(f'{model_string}.architecture.num_layers')
         key = jr.PRNGKey(5678)
-        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key)
+
+        # get activation function callable
+        if config_handler.path_exists(f'{model_string}.architecture.activation_function'):
+            activation_function=get_activation_function(config_handler.get_config_status(f'{model_string}.architecture.activation_function'))
+        else:
+            logging_manager.log(f"Activation function not specified in config file. Using default: relu")
+            activation_function=jax.nn.relu
+
+        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function)
 
     else:
-        raise ValueError(f"Network type {config_handler.get_config_status('encoder_decoder.architecture.network_type')} not supported")
+        raise ValueError(f"Network type {config_handler.get_config_status(f'{model_string}.architecture.network_type')} not supported")
 
 def standard_score_norm(feature_data):
 

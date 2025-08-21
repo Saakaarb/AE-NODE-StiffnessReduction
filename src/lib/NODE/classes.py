@@ -8,7 +8,7 @@ from functools import partial
 import pickle
 import os
 from src.utils.helper_functions import log_to_mlflow_artifacts,log_to_mlflow_metrics,create_network_instance
-from src.utils.classes import ConfigReader,LoggingManager
+from src.utils.classes import ConfigReader,LoggingManager,VMapMLP
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from diffrax import RESULTS
@@ -21,7 +21,7 @@ from typing import Any
 
 ##########################################################
 
-@jax.jit
+@eqx.filter_jit
 def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
     """
     Compute the right-hand side of the Neural ODE system.
@@ -43,9 +43,9 @@ def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
 
     constants=other_args['constants']
     #scaling=constants['latent_scaling']
-    trainable_variables_NODE=other_args['trainable_variables_NODE']
+    trainable_model_NODE=other_args['trainable_model_NODE']['NODE']
     i_traj=other_args['i_traj']
-    state=jnp.expand_dims(state,axis=0)
+    #state=jnp.expand_dims(state,axis=0)
 
     #TODO change scaling for input and output
     # hardcoded for now
@@ -55,13 +55,15 @@ def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
     # scaling trick derived from 
     #Stiff Neural Ordinary Differential Equations, Kim, Ji et al
     #https://arxiv.org/pdf/2103.15341
-    #jax.debug.print("input: {x}, scaled input: {y}",x=state,y=jnp.divide(state,scaling))
-    derivatives=jnp.squeeze(_forward_pass(jnp.divide(state,scaling),trainable_variables_NODE['NODE']))*(1.0/constants['end_time']) # scaling included
-    #jax.debug.print("i_traj: {z}, t:{y} derivatives:{x}",z=i_traj,y=t,x=derivatives)
-    return jnp.squeeze(derivatives)
+    #jax.debug.print("state shape in ode_fn: {x}",x=jnp.divide(state,scaling).shape)
+    #derivatives=jnp.squeeze(_forward_pass(jnp.divide(state,scaling),trainable_variables_NODE['NODE']))*(1.0/constants['end_time']) # scaling included
+    derivatives=trainable_model_NODE(jnp.divide(state,scaling))*(1.0/constants['end_time']) # scaling included
+    #jax.debug.print("derivatives shape in ode_fn: {x}",x=derivatives.shape)
+    return derivatives
 
-@partial(jax.jit,static_argnums=(5,))
-def _integrate_NODE(constants: dict[str,Any],trainable_variables_NODE: dict[str,jax.Array],enc_dec_weights:dict[str,jax.Array],data_dict:dict[str,jax.Array],i_traj:int,max_traj_size:int):
+#@partial(jax.jit,static_argnums=(5,))
+@eqx.filter_jit
+def _integrate_NODE(constants: dict[str,Any],trainable_model_NODE: dict[str,VMapMLP],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],i_traj:int,max_traj_size:int):
     """
     Integrate the Neural ODE system for a single trajectory.
     
@@ -73,8 +75,8 @@ def _integrate_NODE(constants: dict[str,Any],trainable_variables_NODE: dict[str,
     Args:
         constants (dict[str, Any]): Dictionary containing ODE solver parameters
                                    (pcoeff, icoeff, rtol, atol, init_dt, dtmin)
-        trainable_variables_NODE (dict[str, jax.Array]): Neural ODE network weights
-        enc_dec_weights (dict[str, jax.Array]): Encoder and decoder network weights
+        trainable_model_NODE (dict[str, VMapMLP]): Neural ODE network weights
+        enc_dec_models (dict[str, VMapMLP]): Encoder and decoder network weights
         data_dict (dict[str, jax.Array]): Dictionary containing time data and initial conditions
         i_traj (int): Index of the trajectory to integrate
         max_traj_size (int): Maximum number of time steps for integration
@@ -99,50 +101,33 @@ def _integrate_NODE(constants: dict[str,Any],trainable_variables_NODE: dict[str,
     t_init= start_end_time_data[i_traj,0] #constants['start_time']
     t_final= start_end_time_data[i_traj,1]#constants['end_time']
 
-    
-    phys_space_init=jnp.expand_dims(initial_condition_data[i_traj,:],axis=0)#constants['y_init']
-
+    # current dim of init cond data: [features]
+    # expand to [1,1,features] for consistency with custom forward pass call as defined for MLP
+    phys_space_init=jnp.expand_dims(jnp.expand_dims(initial_condition_data[i_traj,:],axis=0),axis=0)#constants['y_init']
+   
     # convert initial cond to latent space
-    y_latent_init = jnp.squeeze(_forward_pass(phys_space_init,enc_dec_weights['encoder']))
+    # output shape: [1,1,latent_dim]
+    y_latent_init = enc_dec_models['encoder'](phys_space_init)
 
     curr_time_data=time_data[i_traj,:]
-    #jax.debug.print("curr_time_data: {x}",x=curr_time_data)
-    #jax.debug.print("curr time data shape: {x}",x=curr_time_data.shape)
-
+    
     #saveat = diffrax.SaveAt(ts=curr_time_data)
     saveat = diffrax.SaveAt(t0=True,t1=True,steps=True)
     stepsize_controller=diffrax.StepTo(ts=curr_time_data)
 
     term = diffrax.ODETerm(_ode_fn)
-    #rtol=jnp.array([1E-2,1E-3])
-
-    # TODO try batched euler within diffrax diffeqsolve
-    #solution = diffrax.diffeqsolve(term,diffrax.Dopri5(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
-    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
-    #                                max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=pcoeff,icoeff=icoeff,rtol=rtol, atol=atol,dtmin=dtmin))
     
-    #solution = diffrax.diffeqsolve(term,diffrax.Euler(),t0=t_init,t1=t_final,dt0 = init_dt,y0=y_latent_init,
-    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
-    #                                max_steps=16384)
-
-    #solution = diffrax.diffeqsolve(term,diffrax.Tsit5(),t0=t_init,t1=t_final,dt0=init_dt,y0=y_latent_init,
-    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=True,
-    #                                max_steps=600)
-
+    # solution dimension: [Nts,1,1,latent_dim]
     solution = diffrax.diffeqsolve(term,diffrax.Heun(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
-                                    saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
+                                    saveat=saveat,args={'constants':constants,'trainable_model_NODE':trainable_model_NODE,'i_traj':i_traj},throw=False,
                                     max_steps=max_traj_size-1,stepsize_controller=stepsize_controller)
-    #jax.debug.print("solution.ts: {x}, curr_time_data: {y}",x=solution.ts,y=curr_time_data)
-
-    #solution = diffrax.diffeqsolve(term,diffrax.Kvaerno5(),t0=t_init,t1=t_final,dt0 = 1e-11,y0=y_latent_init,
-    #                                saveat=saveat,args={'constants':constants,'trainable_variables_NODE':trainable_variables_NODE,'i_traj':i_traj},throw=False,
-    #                                max_steps=100000,stepsize_controller=diffrax.PIDController(pcoeff=0.3,icoeff=0.4,rtol=1e-6, atol=1e-8,dtmin=None))
-    
+   
     return solution
 
 
-@partial(jax.jit,static_argnums=(4,5,))
-def _loss_fn_NODE(constants:dict[str,Any],trainable_variables_NODE:dict[str,jax.Array],enc_dec_weights:dict[str,jax.Array],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
+#@partial(jax.jit,static_argnums=(4,5,))
+@eqx.filter_jit
+def _loss_fn_NODE(trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
     """
     Compute the loss function for Neural ODE training.
     
@@ -174,39 +159,31 @@ def _loss_fn_NODE(constants:dict[str,Any],trainable_variables_NODE:dict[str,jax.
     
     # Create a vectorized version of the single-trajectory loss computation
     def single_trajectory_loss(i_traj:int):
-        recon_mask_curr=recon_mask[i_traj,:,:]
-        latent_space_mask_curr=latent_space_mask[i_traj,:,:]
-        phys_data=input_data[i_traj,:,:]
 
-        solution=_integrate_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,i_traj,max_traj_size)
+        # retain 3D shapes for each: [1,Nts,n_features or latent_dim]
+        recon_mask_curr=jnp.expand_dims(recon_mask[i_traj,:,:],axis=0)
+        latent_space_mask_curr=jnp.expand_dims(latent_space_mask[i_traj,:,:],axis=0)
+        phys_data=jnp.expand_dims(input_data[i_traj,:,:],axis=0)
+
+        solution=_integrate_NODE(constants,trainable_model_NODE,enc_dec_models,data_dict,i_traj,max_traj_size)
 
         failed = jnp.logical_or(solution.result == RESULTS.max_steps_reached, solution.result==RESULTS.singular)
 
         # predicted output in latent space
-        latent_space_pred=jnp.squeeze(solution.ys)
-
-        #jax.debug.print("solution time: {x}",x=solution.ts)
+        # reshape to [1,Nts,latent_dim]
+        latent_space_pred=jnp.expand_dims(jnp.squeeze(solution.ys),axis=0)
         # prediction after integration
-        phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
-        #jax.debug.print("phys_space_pred_int: {x}",x=phys_space_pred_int)
-        #jax.debug.print("phys_data: {x}",x=phys_data)
-        #jax.debug.print("recon_mask_curr: {x}",x=recon_mask_curr)
-
+        phys_space_pred_int=enc_dec_models['decoder'](latent_space_pred) #_forward_pass(latent_space_pred,enc_dec_models['decoder'])
+        
         #jax.debug.print("loss_L1: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
         loss_L1=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
-        #jax.debug.print("phys_space_pred_int: {x}, phys_data: {y}, recon_mask_curr: {z}",x=phys_space_pred_int,y=phys_data,z=recon_mask_curr)
-        #loss_L1=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr))))
-
+        
         # latent space truth
-        latent_space_truth=_forward_pass(phys_data,enc_dec_weights['encoder'])
-        #jax.debug.print("latent_space_pred: {x}",x=latent_space_pred)
-        #jax.debug.print("latent_space_truth: {x}",x=latent_space_truth)
-        #jax.debug.print("latent_space_mask_curr: {x}",x=latent_space_mask_curr)
+        latent_space_truth=enc_dec_models['encoder'](phys_data) #_forward_pass(phys_data,enc_dec_models['encoder'])
 
         #jax.debug.print("loss_L3: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
         loss_L3=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
-        #loss_L3=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr))))
-
+       
         return loss_L1, loss_L3, jnp.where(failed,0.0,1.0)
 
     # Vectorize over all trajectories
@@ -317,7 +294,7 @@ class Neural_ODE():
 
         # load model if specified
         if self.config_handler.get_config_status("neural_ode.saving.load_model"):
-            self.load_NODE_weights()
+            self.load_NODE_model()
         else:
 
             # initialize network
@@ -327,12 +304,12 @@ class Neural_ODE():
             self._train_NODE()
         
             if self.config_handler.get_config_status("neural_ode.saving.save_model"):
-                self.save_NODE_weights()
+                self.save_NODE_model()
 
         # test loaded model
         if self.config_handler.get_config_status("neural_ode.testing.test_model"):
             self.logging_manager.log("Getting predictions for test data")
-            self.test_NODE_model(self.encoder_decoder_handler.encoder_object.weights,self.encoder_decoder_handler.decoder_object.weights,self.NODE_object.weights)
+            self.test_NODE_model()
 
             # visualize results
             if self.config_handler.get_config_status("neural_ode.testing.visualization.plot_results"):
@@ -389,16 +366,13 @@ class Neural_ODE():
         hidden_size_NODE=self.config_handler.get_config_status("neural_ode.architecture.network_width")
 
         NODE_sizes=[n_latent_space,hidden_size_NODE,n_latent_space]
-        #for i_layer in range(self.config_handler.get_config_status("neural_ode.architecture.num_layers")):
-        #    NODE_sizes.append([hidden_size_NODE,hidden_size_NODE])
-        #NODE_sizes.append([hidden_size_NODE,n_latent_space])
 
-        self.NODE_object=create_network_instance(NODE_sizes,self.config_handler) #MLP(NODE_sizes,self.config_handler)
-        #self.NODE_object.initialize_network()
+        self.NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode')
         
-        self.trainable_models_NODE={'NODE':self.NODE_object.weights}
-        self.enc_dec_weights={'encoder':self.encoder_decoder_handler.encoder_object.weights,
-                              'decoder':self.encoder_decoder_handler.decoder_object.weights}
+        self.trainable_model_NODE={'NODE':self.NODE_object}
+        self.best_model_NODE={'NODE':self.NODE_object}
+        self.enc_dec_models={'encoder':self.encoder_decoder_handler.encoder_object,
+                              'decoder':self.encoder_decoder_handler.decoder_object}
 
         #if self.trainable_enc_dec:
 
@@ -429,7 +403,7 @@ class Neural_ODE():
         self.best_training_loss=float('inf')
         self.best_test_loss=float('inf')
 
-        opt_state=self.optimizer.init(self.trainable_variables_NODE)
+        opt_state=self.optimizer.init(eqx.filter(self.trainable_model_NODE,eqx.is_inexact_array))
         success=1
 
         # test node model before training
@@ -478,7 +452,9 @@ class Neural_ODE():
         #    value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=(1,2),allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights)
 
         #else:
-        value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights,data_dict,num_traj,self.constants['max_train_traj_size'])
+        #value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.constants,self.trainable_variables_NODE,self.enc_dec_weights,data_dict,num_traj,self.constants['max_train_traj_size'])
+
+        value,grad_loss=eqx.filter_value_and_grad(_loss_fn_NODE,allow_int=True)(self.trainable_model_NODE,self.constants,self.enc_dec_models,data_dict,num_traj,int(self.constants['max_train_traj_size']))
 
         
         #if self.trainable_enc_dec:
@@ -489,18 +465,18 @@ class Neural_ODE():
         if self.config_handler.get_config_status("neural_ode.training.optimizer")=="adam":
             updates,opt_state=self.optimizer.update(grad_loss,opt_state)
         elif self.config_handler.get_config_status("neural_ode.training.optimizer")=="l-bfgs":
-            def loss_wrapper(trainable_vars):
-                return self.loss_fn(self.constants, trainable_vars, self.enc_dec_weights, data_dict, num_traj,self.constants['max_train_traj_size'])
-            updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables_NODE,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
+            def loss_wrapper(trainable_model):
+                return _loss_fn_NODE( trainable_model, self.constants, self.enc_dec_models, data_dict, num_traj,int(self.constants['max_train_traj_size']))
+            updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_model_NODE,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
 
         # get new value for trainable variable
-        results=optax.apply_updates(self.trainable_variables_NODE,updates)
+        results=eqx.apply_updates(self.trainable_model_NODE,updates)
 
         # update values
-        self.trainable_variables_NODE.update({'NODE':results['NODE']})
+        self.trainable_model_NODE.update(results)
 
         if self.trainable_enc_dec:
-            self.enc_dec_weights.update({'encoder':results['encoder'],'decoder':results['decoder']})
+            self.enc_dec_models.update({'encoder':results['encoder'],'decoder':results['decoder']})
 
         
         if train_step % self.print_freq==0:
@@ -511,7 +487,7 @@ class Neural_ODE():
                 return opt_state,success
 
 
-            test_loss=self.loss_fn(self.test_constants,self.trainable_variables_NODE,self.enc_dec_weights,self.test_data_dict,self.test_constants['num_test_traj'],self.test_constants['max_test_traj_size'])
+            test_loss=_loss_fn_NODE(self.trainable_model_NODE,self.test_constants,self.enc_dec_models,self.test_data_dict,int(self.test_constants['num_test_traj']),int(self.test_constants['max_test_traj_size']))
 
             self.training_loss_values.append(value)
             self.test_loss_values.append(test_loss)
@@ -523,9 +499,11 @@ class Neural_ODE():
             if test_loss < self.best_test_loss:
                 self.best_test_loss=test_loss
                 self.logging_manager.log(f"New best test loss: {test_loss}, recording weights")
-                self.NODE_object.weights=self.trainable_variables_NODE['NODE']
-                #self.encoder_decoder_handler.encoder_object.weights=self.trainable_variables_NODE['encoder']
-                #self.encoder_decoder_handler.decoder_object.weights=self.trainable_variables_NODE['decoder']
+                self.best_model_NODE.update(self.trainable_model_NODE)
+                if self.trainable_enc_dec:
+                    raise NotImplementedError("Not implemented")
+                    #self.encoder_decoder_handler.encoder_object.weights=self.trainable_model_NODE['encoder']
+                    #self.encoder_decoder_handler.decoder_object.weights=self.trainable_model_NODE['decoder']
         
             # log to mlflow
             log_to_mlflow_metrics({'node_training_loss':value,'node_test_loss':test_loss},train_step)
@@ -536,7 +514,7 @@ class Neural_ODE():
         return opt_state,success
 
 
-    def loss_fn(self,constants:dict[str,Any],trainable_variables_NODE:dict[str,jax.Array],enc_dec_weights:dict[str,jax.Array],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
+    def loss_fn(self,trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
         """
         Compute the loss function for Neural ODE training.
         
@@ -557,10 +535,10 @@ class Neural_ODE():
         """
 
         max_traj_size=int(max_traj_size)
-        return _loss_fn_NODE(constants,trainable_variables_NODE,enc_dec_weights,data_dict,num_traj,max_traj_size)
+        return _loss_fn_NODE(trainable_model_NODE,constants,enc_dec_models,data_dict,num_traj,max_traj_size)
 
     # predict solution trajectories
-    def test_NODE_model(self,enc_weights:jax.Array,dec_weights:jax.Array,NODE_weights:jax.Array):
+    def test_NODE_model(self,):
         """
         Test the Neural ODE model on test data.
         
@@ -569,13 +547,11 @@ class Neural_ODE():
         integration failures gracefully and saves predictions for later analysis.
         
         Args:
-            enc_weights (jax.Array): Encoder network weights
-            dec_weights (jax.Array): Decoder network weights
-            NODE_weights (jax.Array): Neural ODE network weights
+            None
         """
 
-        node_weights_dict={'NODE':NODE_weights}
-        enc_dec_weights={'encoder':enc_weights,'decoder':dec_weights}
+        #node_model={'NODE':self.}
+        #enc_dec_weights={'encoder':enc_weights,'decoder':dec_weights}
 
         # load test data
 
@@ -604,14 +580,18 @@ class Neural_ODE():
 
         for i_traj in range(num_test_traj):
             self.logging_manager.log(f"Predicting trajectory {i_traj+1} of {num_test_traj}")
-            solution=_integrate_NODE(self.test_constants,node_weights_dict,enc_dec_weights,self.test_data_dict,i_traj,max_traj_size) 
+            # dimension of solution: [nts,1,1,n_dimension]
+            solution=_integrate_NODE(self.test_constants,self.best_model_NODE,self.enc_dec_models,self.test_data_dict,i_traj,max_traj_size) 
+
+            jax.debug.print("solution.ys shape: {x}",x=solution.ys.shape)
 
             # check if integration failed
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:
                 self.logging_manager.log(f"Integration failed for trajectory {i_traj+1} of {num_test_traj}")
                 
-            latent_space_pred=jnp.squeeze(solution.ys)
-            phys_space_pred_int=_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
+            # convert to [1,nts,n_dimension]
+            latent_space_pred=jnp.expand_dims(jnp.squeeze(solution.ys),axis=0)
+            phys_space_pred_int=self.enc_dec_models['decoder'](latent_space_pred) #_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
 
             # unscale predicted ys
             # std_vals and mean_vals are of shape (1,num_inputs)
@@ -643,7 +623,7 @@ class Neural_ODE():
         log_to_mlflow_artifacts(Path(self.config_handler.get_config_status("neural_ode.testing.save_dir"))/Path("true_list.pkl"),"true_list_node")
         
     # save neural ODE weights out
-    def save_NODE_weights(self):
+    def save_NODE_model(self):
         """
         Save the trained Neural ODE model to disk.
         
@@ -651,11 +631,12 @@ class Neural_ODE():
         and saves it to the configured model output directory.
         """
 
-        with open(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path")),'wb') as f:
+        save_path=Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path"))
+        
+        with open(save_path,'wb') as f:
+            eqx.tree_serialise_leaves(f,self.best_model_NODE)
 
-            pickle.dump(self.NODE_object,f,pickle.HIGHEST_PROTOCOL)
-
-    def load_NODE_weights(self):
+    def load_NODE_model(self):
         """
         Load pre-trained Neural ODE model from disk.
         
@@ -663,9 +644,20 @@ class Neural_ODE():
         files and loads it into the current instance.
         """
         
-        with open(Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path")),'rb') as f:
+        load_path=Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path"))
 
-            self.NODE_object=pickle.load(f)
+        n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
+        hidden_size_NODE=self.config_handler.get_config_status("neural_ode.architecture.network_width")
+
+        NODE_sizes=[n_latent_space,hidden_size_NODE,n_latent_space]
+
+        NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode')
+
+        best_model_NODE={'NODE':NODE_object}
+
+        with open(load_path,'rb') as f:
+            self.best_model_NODE=eqx.tree_deserialise_leaves(f,best_model_NODE)
+
 
     def save_predictions(self,predictions_list:dict[str,list[np.ndarray]],true_list:dict[str,list[np.ndarray]]):
         """

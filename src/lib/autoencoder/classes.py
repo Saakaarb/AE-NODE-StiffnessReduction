@@ -117,10 +117,6 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     #predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
     predicted_specie=networks['decoder'](latent_space_preds)
 
-    #jax.debug.print("input_data_shape :{x}",x=input_data.shape)
-    #jax.debug.print("latent_space_preds_shape :{x}",x=latent_space_preds.shape)
-    #jax.debug.print("predicted_specie_shape :{x}",x=predicted_specie.shape)
-
     # construct reconstruction
     recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
 
@@ -192,6 +188,7 @@ class Encoder_Decoder():
         if self.config_handler.get_config_status("encoder_decoder.loading.load_model"):
             self.logging_manager.log("Loading encoder and decoder weights")
             self._load_enc_dec()
+            self.logging_manager.log("Encoder and decoder weights loaded")
         else:
             self.logging_manager.log("Initializing encoder and decoder weights, and training encoder and decoder")
             # initialize model
@@ -270,8 +267,8 @@ class Encoder_Decoder():
         decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
 
 
-        self.encoder_object=create_network_instance(encoder_sizes,self.config_handler)
-        self.decoder_object=create_network_instance(decoder_sizes,self.config_handler)
+        self.encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
+        self.decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
 
         self.best_encoder_object=deepcopy(self.encoder_object)
         self.best_decoder_object=deepcopy(self.decoder_object)
@@ -297,13 +294,10 @@ class Encoder_Decoder():
         # get test data
         self.test_data_dict=self.data_processing_handler.get_test_data()
 
-        #self.trainable_variables={'encoder':self.encoder_object.weights,'decoder':self.decoder_object.weights}
         self.trainable_models={'encoder':self.encoder_object,'decoder':self.decoder_object}
         self.best_trainable_models={'encoder':self.best_encoder_object,'decoder':self.best_decoder_object}
         # initialize optimizer
         self.__init_optimizer__()
-
-        #opt_state=self.optimizer.init(self.trainable_variables)
         
         opt_state=self.optimizer.init(eqx.filter(self.trainable_models,eqx.is_inexact_array))
 
@@ -357,13 +351,13 @@ class Encoder_Decoder():
             def loss_wrapper(trainable_models):
                 return self.loss_fn(trainable_models, self.training_constants,data_dict)
             updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_models,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
-            #updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
+             
         # get new value for trainable variable
         
         results=eqx.apply_updates(self.trainable_models,updates)
 
         # update values
-        #self.trainable_variables.update(results)
+        
         self.trainable_models.update(results)
 
         # according to update criteria, update the encoder and decoder weights
@@ -372,7 +366,6 @@ class Encoder_Decoder():
 
             # update values in object, which is used to compute test error
 
-            #error,cond_loss=self.test_error_compute(self.trainable_variables['encoder'],self.trainable_variables['decoder'])
             error,cond_loss=self.test_error_compute(self.trainable_models['encoder'],self.trainable_models['decoder'])
 
             self.test_loss_values.append(error)
@@ -438,14 +431,12 @@ class Encoder_Decoder():
 
         input_data=self.test_data_dict['input_data']
 
-        #latent_space_preds=_forward_pass(input_data,enc_weights)
         latent_space_preds=enc_object(input_data)
-        #input_preds=_forward_pass(latent_space_preds,dec_weights)
+        
         input_preds=dec_object(latent_space_preds)
 
         # compute error
-        # TODO: use a mask to ignore the extra time steps
-        #error=jnp.sqrt(jnp.mean(jnp.square(input_data-input_preds)))
+        
         error=_compute_recon_loss(input_data,input_preds,self.test_data_dict)
 
         #if self.stiffness_reduction:
@@ -498,13 +489,11 @@ class Encoder_Decoder():
         and saves them to the configured model output directory.
         """
 
-        eqx.tree_serialise_leaves(self.trainable_models,Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")))
+        save_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path"))
+        
+        with open(save_path,'wb') as f:
+            eqx.tree_serialise_leaves(f,self.trainable_models)
 
-        #save_tree=[self.encoder_object,self.decoder_object]
-
-        #with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'wb') as f: 
-
-        #    pickle.dump(save_mats,f,pickle.HIGHEST_PROTOCOL)
     def _load_enc_dec(self):
         """
         Load pre-trained encoder and decoder models from disk.
@@ -520,13 +509,19 @@ class Encoder_Decoder():
         encoder_sizes=[num_inputs,hidden_state_size,n_latent_space]
         decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
 
-        encoder_object=create_network_instance(encoder_sizes,self.config_handler)
-        decoder_object=create_network_instance(decoder_sizes,self.config_handler)
+        encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
+        decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
 
         trainable_models_init={'encoder':encoder_object,'decoder':decoder_object}
 
         load_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path"))
-        self.best_trainable_models=eqx.tree_deserialise_leaves(load_path,trainable_models_init)
+
+        with open(load_path,'rb') as f:
+            loadedbest_trainable_models=eqx.tree_deserialise_leaves(f,trainable_models_init)
+
+        self.best_trainable_models=loadedbest_trainable_models
+        self.encoder_object=loadedbest_trainable_models['encoder']
+        self.decoder_object=loadedbest_trainable_models['decoder']
 
     def visualize_results(self):
         """

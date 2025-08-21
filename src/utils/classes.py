@@ -6,7 +6,7 @@ import equinox as eqx
 import logging
 import os
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any,Callable
 
 class ConfigReader():
     def __init__(self,config_filename:str)->None:
@@ -37,6 +37,43 @@ class ConfigReader():
             curr_layer = curr_layer[nested_keys[i]]
         curr_layer[nested_keys[-1]] = value
 
+    def path_exists(self, key: str) -> bool:
+        """
+        Check if a particular path exists in the configuration.
+        
+        Args:
+            key (str): The configuration path to check, using dot notation (e.g., "encoder_decoder.architecture.network_width")
+            
+        Returns:
+            bool: True if the path exists, False otherwise
+        """
+        try:
+            curr_layer = self.config_status
+            nested_keys = key.split(".")
+            
+            for nested_key in nested_keys:
+                if nested_key not in curr_layer:
+                    return False
+                curr_layer = curr_layer[nested_key]
+            
+            return True
+        except (KeyError, TypeError, AttributeError):
+            return False
+
+    def get_config_status_safe(self, key: str, default: Any = None) -> Any:
+        """
+        Safely get a configuration value with a default fallback.
+        
+        Args:
+            key (str): The configuration path to retrieve
+            default (Any): Default value to return if the path doesn't exist
+            
+        Returns:
+            Any: The configuration value if it exists, otherwise the default value
+        """
+        if self.path_exists(key):
+            return self.get_config_status(key)
+        return default
 
 
 class VMapMLP(eqx.Module):
@@ -49,7 +86,7 @@ class VMapMLP(eqx.Module):
     
     mlp: eqx.nn.MLP
     
-    def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey):
+    def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh):
         """
         Initialize the VMapMLP wrapper.
         batch_axis: axis to apply vmap on
@@ -65,15 +102,16 @@ class VMapMLP(eqx.Module):
             width_size=width_size,
             out_size=out_size,
             depth=depth,
-            key=key
+            key=key,
+            activation=activation_function
         )
-    
+    #@partial(jax.jit,static_argnums=(1,))
     def __call__(self, x: jax.Array) -> jax.Array:
         """
         Forward pass with vmap applied to batch dimension.
         
         Args:
-            x: Input tensor of shape [batch, time, features] or [batch, features]
+            x: Input tensor of shape [batch, time, features] assumed default
             
         Returns:
             Output tensor with same batch and time dimensions
