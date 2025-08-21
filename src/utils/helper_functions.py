@@ -1,23 +1,59 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 import random
 import mlflow
+import equinox
+from src.utils.classes import ConfigReader, VMapMLP,LoggingManager
 
 # for the system created by the script 2_eq_system.py
 
-@jax.jit
-def _forward_pass(network_input,network):
+# @jax.jit
+# def _forward_pass(network_input,network):
 
-    interm_comp=network_input
-    for i_layer in range(len(network[0])):
+#     interm_comp=network_input
+#     for i_layer in range(len(network[0])):
         
-        if i_layer!=len(network[0])-1:
-            interm_comp=jax.nn.tanh(interm_comp@network[0][i_layer]+network[1][i_layer])
-        else:
-            interm_comp=interm_comp@network[0][i_layer]+network[1][i_layer]
+#         if i_layer!=len(network[0])-1:
+#             interm_comp=jax.nn.tanh(interm_comp@network[0][i_layer]+network[1][i_layer])
+#         else:
+#             interm_comp=interm_comp@network[0][i_layer]+network[1][i_layer]
 
-    return interm_comp
+#     return interm_comp
+
+def get_activation_function(activation_function:str):
+
+    if activation_function=='relu':
+        return jax.nn.relu
+    elif activation_function=='gelu':
+        return jax.nn.gelu
+    elif activation_function=='tanh':
+        return jax.nn.tanh
+    else:
+        raise ValueError(f"Activation function {activation_function} not supported")
+
+def create_network_instance(network_sizes:list,config_handler:ConfigReader,logging_manager:LoggingManager,model_string:str)->equinox.Module:
+
+    if config_handler.get_config_status(f'{model_string}.architecture.network_type')=='mlp':
+
+        input_size=network_sizes[0]
+        output_size=network_sizes[-1]
+        hidden_size=network_sizes[1]
+        num_layers=config_handler.get_config_status(f'{model_string}.architecture.num_layers')
+        key = jr.PRNGKey(5678)
+
+        # get activation function callable
+        if config_handler.path_exists(f'{model_string}.architecture.activation_function'):
+            activation_function=get_activation_function(config_handler.get_config_status(f'{model_string}.architecture.activation_function'))
+        else:
+            logging_manager.log(f"Activation function not specified in config file. Using default: relu")
+            activation_function=jax.nn.relu
+
+        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function)
+
+    else:
+        raise ValueError(f"Network type {config_handler.get_config_status(f'{model_string}.architecture.network_type')} not supported")
 
 def standard_score_norm(feature_data):
 

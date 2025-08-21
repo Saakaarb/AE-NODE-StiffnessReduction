@@ -76,7 +76,11 @@ where
 
 4. Can be used on time series data in any timescale range (nanoseconds to seconds); utilizes several scaling and normalization tricks and conventions, some of which are discussed in [5].
 
-5. Built in MLFlow tracking of experimental settings, results and artifacts. 
+5. Built on well documented, standard libraries. These include
+  i. [Diffrax](https://docs.kidger.site/diffrax/) for training Neural ODEs
+  ii. [Equinox](https://docs.kidger.site/equinox/) for setting up neural networks
+  iii. [Optax](https://optax.readthedocs.io/en/latest/index.html) for running training network training
+  iv.  [MLFlow](https://mlflow.org/) tracking of experimental settings, results and artifacts. 
 
 # Getting Started
 
@@ -100,7 +104,7 @@ To demonstrate the utility of the framework, we will create a model that learns 
 
 We will consider the following ranges of initial conditions:
 
-```
+```math
 Y_{F,init}=[0.03,0.1]
 Y_{Temp,init}=[1100,1300] K
 
@@ -239,19 +243,19 @@ Listed below are some best practices to avoid pitfalls for training Neural ODEs,
 
 This repo leverages techniques, ideas and APIs from the following works:
 
-1. ChemNODE: A neural ordinary differential equations framework for efficient chemical kinetic solvers (link:  https://www.sciencedirect.com/science/article/pii/S2666546821000677)
+1.[ChemNODE: A neural ordinary differential equations framework for efficient chemical kinetic solvers](https://www.sciencedirect.com/science/article/pii/S2666546821000677)
 
-2. A data-driven reduced-order model for stiff chemical kinetics using dynamics-informed training (link: https://www.sciencedirect.com/science/article/pii/S2666546823000976)
+2. [A data-driven reduced-order model for stiff chemical kinetics using dynamics-informed training](https://www.sciencedirect.com/science/article/pii/S2666546823000976)
 
-3. Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics (link: https://arc.aiaa.org/doi/abs/10.2514/6.2022-0226)
+3. [Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics](https://arc.aiaa.org/doi/abs/10.2514/6.2022-0226)
 
-4. A Physics-Constrained Autoencoder-NeuralODE Framework for Learning Complex Hydrocarbon Fuel Chemistry: Methane Combustion Kinetics (link: https://www.frontiersin.org/journals/thermal-engineering/articles/10.3389/fther.2025.1594443/abstract)
+4. [A Physics-Constrained Autoencoder-NeuralODE Framework for Learning Complex Hydrocarbon Fuel Chemistry: Methane Combustion Kinetics](https://www.frontiersin.org/journals/thermal-engineering/articles/10.3389/fther.2025.1594443/abstract)
 
-5. Stiff Neural Ordinary Differential Equations (Link: https://arxiv.org/abs/2103.15341)
+5. [Stiff Neural Ordinary Differential Equations](https://arxiv.org/abs/2103.15341)
 
-6. Neural Ordinary Differential Equations (Link: https://arxiv.org/abs/1806.07366)
+6. [Neural Ordinary Differential Equations](https://arxiv.org/abs/1806.07366)
 
-7. On Neural Differential Equations (Link: https://arxiv.org/abs/2202.02435)
+7. [On Neural Differential Equations](https://arxiv.org/abs/2202.02435)
 
 # Directory Structure
 
@@ -279,5 +283,4 @@ AE-NODE-StiffnessReduction/
 
 - Further GPU optimization
 - Tests
-- Equinox based models
 - Scaling of latent space inputs
