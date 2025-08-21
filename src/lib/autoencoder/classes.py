@@ -117,6 +117,10 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     #predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
     predicted_specie=networks['decoder'](latent_space_preds)
 
+    #jax.debug.print("input_data_shape :{x}",x=input_data.shape)
+    #jax.debug.print("latent_space_preds_shape :{x}",x=latent_space_preds.shape)
+    #jax.debug.print("predicted_specie_shape :{x}",x=predicted_specie.shape)
+
     # construct reconstruction
     recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
 
@@ -126,6 +130,7 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     # and introduces a multi-objective optimization term
 
     if stiffness_reduction:
+        #jax.debug.print("stiffness reduction")
         cond_loss=_compute_condition_number_norm(data_dict,latent_space_preds)
     else:
         cond_loss=jnp.zeros(())
