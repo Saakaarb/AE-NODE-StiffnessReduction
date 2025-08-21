@@ -1,9 +1,9 @@
 data_processing:
 
     saving_loading:
-        load_data: False # True/False
+        load_data: True # True/False
         save_data: True # True/False
-        raw_data_path: "raw_data/larger_script_data"
+        raw_data_path: "raw_data/script_data"
         processed_data_path: "processed_data"
 
     # data processing information
@@ -20,14 +20,15 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: False # True/False
+        load_model: True # True/False
         model_output_dir: 'encoder_decoder_weights'
-        load_path: 'encoder_decoder_weights.pkl' 
+        load_path: 'encoder_decoder_weights.eqx' 
 
     architecture:
         network_type: 'mlp'
+        activation_function: 'tanh' # 'relu' or 'gelu' or 'tanh'
         network_width: 128
-        num_layers: 2
+        num_layers: 3
 
     training:
 
@@ -39,7 +40,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 30000
+        num_training_iters: 2000 # for l-bfgs use max 200 steps, for adam use 30000
         
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
@@ -69,8 +70,9 @@ neural_ode:
 
     architecture:
         network_type: 'mlp'
+        activation_function: 'tanh' # 'relu' or 'gelu' or 'tanh'
         network_width: 128
-        num_layers: 2
+        num_layers: 3
 
     training:
        
@@ -86,7 +88,7 @@ neural_ode:
                              # else diffrax will perform poorly
 
         # batch processing
-        num_training_iters: 5000 # for l-bfgs use max 200 steps, for adam use 10000
+        num_training_iters: 100 # for l-bfgs use max 200 steps, for adam use 10000
         
         print_freq: 100
 
