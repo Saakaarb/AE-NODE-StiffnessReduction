@@ -8,7 +8,7 @@ from functools import partial
 import pickle
 import os
 from src.utils.helper_functions import log_to_mlflow_artifacts,log_to_mlflow_metrics
-from src.utils.classes import ConfigReader,LoggingManager
+from src.utils.classes import ConfigReader,LoggingManager,create_network_instance
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from diffrax import RESULTS
@@ -241,7 +241,7 @@ class Neural_ODE():
         test_data_dict (dict): Test data for evaluation
         test_constants (dict): Constants for testing
         trainable_enc_dec (bool): Whether to train encoder-decoder simultaneously
-        NODE_object (MLP): Neural network defining the ODE dynamics
+        NODE_object (VMapMLP): Neural network defining the ODE dynamics
     """
 
     def __init__(self,config_handler:ConfigReader,logging_manager:LoggingManager,data_processing_handler:Data_Processing,encoder_decoder_handler:Encoder_Decoder):
@@ -388,15 +388,15 @@ class Neural_ODE():
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
         hidden_size_NODE=self.config_handler.get_config_status("neural_ode.architecture.network_width")
 
-        NODE_sizes=[[n_latent_space,hidden_size_NODE]]
-        for i_layer in range(self.config_handler.get_config_status("neural_ode.architecture.num_layers")):
-            NODE_sizes.append([hidden_size_NODE,hidden_size_NODE])
-        NODE_sizes.append([hidden_size_NODE,n_latent_space])
+        NODE_sizes=[n_latent_space,hidden_size_NODE,n_latent_space]
+        #for i_layer in range(self.config_handler.get_config_status("neural_ode.architecture.num_layers")):
+        #    NODE_sizes.append([hidden_size_NODE,hidden_size_NODE])
+        #NODE_sizes.append([hidden_size_NODE,n_latent_space])
 
-        self.NODE_object=MLP(NODE_sizes,self.config_handler)
-        self.NODE_object.initialize_network()
+        self.NODE_object=create_network_instance(NODE_sizes,self.config_handler) #MLP(NODE_sizes,self.config_handler)
+        #self.NODE_object.initialize_network()
         
-        self.trainable_variables_NODE={'NODE':self.NODE_object.weights}
+        self.trainable_models_NODE={'NODE':self.NODE_object.weights}
         self.enc_dec_weights={'encoder':self.encoder_decoder_handler.encoder_object.weights,
                               'decoder':self.encoder_decoder_handler.decoder_object.weights}
 

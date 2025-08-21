@@ -260,8 +260,6 @@ class Encoder_Decoder():
         num_inputs=self.data_processing_handler.num_inputs
         n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
         hidden_state_size=self.config_handler.get_config_status("encoder_decoder.architecture.network_width")
-
-        # TODO add layers
      
         encoder_sizes=[num_inputs,hidden_state_size,n_latent_space]
         decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
@@ -344,16 +342,9 @@ class Encoder_Decoder():
         data_dict=self.data_processing_handler.sample_training_data()
 
         # get value and grad
-        #value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_variables,data_dict)
-        
-        #value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_models,data_dict)
-        #value,grad_loss=eqx.filter_value_and_grad(self.loss_fn,allow_int=True)(self.trainable_models,self.training_constants,data_dict)
         
         value,grad_loss=eqx.filter_value_and_grad(_loss_fn_autoencoder,allow_int=True)(self.trainable_models,self.training_constants,data_dict,self.stiffness_reduction)
-        #_loss_fn_autoencoder(networks,constants,data_dict,self.stiffness_reduction)
-        #value,grad_loss=eqx.filter_value_and_grad(_loss_fn_autoencoder,allow_int=True)(params,static,self.training_constants,data_dict,self.stiffness_reduction)
-
-
+       
         #compute update to trainable variable
         if self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="adam":
             updates,opt_state=self.optimizer.update(grad_loss,opt_state)
@@ -363,7 +354,6 @@ class Encoder_Decoder():
             updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_models,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
             #updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
         # get new value for trainable variable
-        #results=optax.apply_updates(self.trainable_variables,updates)
         
         results=eqx.apply_updates(self.trainable_models,updates)
 
@@ -425,8 +415,8 @@ class Encoder_Decoder():
         optionally save predictions and true values for later analysis.
         
         Args:
-            enc_weights: Encoder network weights
-            dec_weights: Decoder network weights
+            enc_object: Encoder network object
+            dec_object: Decoder network object
             save_results (bool): Whether to save results to files
             
         Returns:

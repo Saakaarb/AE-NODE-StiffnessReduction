@@ -22,7 +22,7 @@ encoder_decoder:
         save_model: True # True/False
         load_model: False # True/False
         model_output_dir: 'encoder_decoder_weights'
-        load_path: 'encoder_decoder_weights.pkl' 
+        load_path: 'encoder_decoder_weights.eqx' 
 
     architecture:
         network_type: 'mlp'
@@ -39,7 +39,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 1000 # for l-bfgs use max 200 steps, for adam use 30000
+        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 30000
         
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
