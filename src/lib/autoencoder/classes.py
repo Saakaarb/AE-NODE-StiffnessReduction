@@ -108,6 +108,10 @@ def _loss_fn_autoencoder(constants:dict,networks:dict,data_dict:dict,stiffness_r
     # forward pass latent rep through decoder
     predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
 
+    #jax.debug.print("input_data_shape :{x}",x=input_data.shape)
+    #jax.debug.print("latent_space_preds_shape :{x}",x=latent_space_preds.shape)
+    #jax.debug.print("predicted_specie_shape :{x}",x=predicted_specie.shape)
+
     # construct reconstruction
     recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
 
