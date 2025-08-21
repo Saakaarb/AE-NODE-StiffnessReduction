@@ -4,8 +4,8 @@ import jax.numpy as jnp
 import jax
 import optax
 import numpy as np
-from src.utils.classes import ConfigReader,MLP,LoggingManager
-from src.utils.helper_functions import _forward_pass,log_to_mlflow_metrics,log_to_mlflow_artifacts
+from src.utils.classes import ConfigReader,LoggingManager
+from src.utils.helper_functions import log_to_mlflow_metrics,log_to_mlflow_artifacts,create_network_instance
 from src.lib.data_processing.classes import Data_Processing
 from pathlib import Path
 import time
@@ -13,6 +13,9 @@ import shutil
 import matplotlib.pyplot as plt
 from functools import partial
 from typing import Any
+import equinox as eqx
+from typing import Any
+from copy import deepcopy
 
 # jit functions need to sit outside of classes
 
@@ -78,8 +81,11 @@ def _compute_condition_number_norm(data_dict:dict[str,jax.Array],latent_space_pr
 
     return cond_loss
 
-@partial(jax.jit,static_argnums=(3,))
-def _loss_fn_autoencoder(constants:dict,networks:dict,data_dict:dict,stiffness_reduction:bool):
+#@partial(jax.jit,static_argnums=(3,))
+#def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_reduction:bool):
+@eqx.filter_jit
+def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_reduction:bool):
+    #networks=eqx.combine(params,static)
     """
     Compute the total loss for the autoencoder training.
     
@@ -97,16 +103,19 @@ def _loss_fn_autoencoder(constants:dict,networks:dict,data_dict:dict,stiffness_r
         jax.Array: Total loss value combining reconstruction and condition number losses
     """
 
+
     lam=constants['stiffness_reduction_weight'] # weight for stiffness reduction loss
     
     # data in shape [num_traj_samples,max_steps,num_inputs]
     input_data=data_dict['input_data']
     
     # forward pass data through encoder
-    latent_space_preds=_forward_pass(input_data,networks['encoder'])
+    #latent_space_preds=_forward_pass(input_data,networks['encoder'])
+    latent_space_preds=networks['encoder'](input_data)
 
     # forward pass latent rep through decoder
-    predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
+    #predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
+    predicted_specie=networks['decoder'](latent_space_preds)
 
     # construct reconstruction
     recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
@@ -195,7 +204,7 @@ class Encoder_Decoder():
         # test loaded model
         if self.config_handler.get_config_status("encoder_decoder.testing.test_model"):
             self.logging_manager.log("Testing loaded encoder and decoder weights")
-            error,cond_loss=self.test_error_compute(self.encoder_object.weights,self.decoder_object.weights,save_results=True)
+            error,cond_loss=self.test_error_compute(self.best_trainable_models['encoder'],self.best_trainable_models['decoder'],save_results=True)
             self.logging_manager.log(f"Test error: {error}, cond loss: {cond_loss}")
 
             if self.config_handler.get_config_status("encoder_decoder.testing.visualization.plot_results"):
@@ -254,20 +263,15 @@ class Encoder_Decoder():
 
         # TODO add layers
      
-        encoder_sizes=[[num_inputs,hidden_state_size]]
-        decoder_sizes=[[n_latent_space,hidden_state_size]]
+        encoder_sizes=[num_inputs,hidden_state_size,n_latent_space]
+        decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
 
-        for i_layer in range(self.config_handler.get_config_status("encoder_decoder.architecture.num_layers")):
-            encoder_sizes.append([hidden_state_size,hidden_state_size])
-            decoder_sizes.append([hidden_state_size,hidden_state_size])
-        encoder_sizes.append([hidden_state_size,n_latent_space])
-        decoder_sizes.append([hidden_state_size,num_inputs])
 
-        self.encoder_object=MLP(encoder_sizes,self.config_handler)
-        self.decoder_object=MLP(decoder_sizes,self.config_handler)
+        self.encoder_object=create_network_instance(encoder_sizes,self.config_handler)
+        self.decoder_object=create_network_instance(decoder_sizes,self.config_handler)
 
-        self.encoder_object.initialize_network()
-        self.decoder_object.initialize_network()
+        self.best_encoder_object=deepcopy(self.encoder_object)
+        self.best_decoder_object=deepcopy(self.decoder_object)
 
 
     def _train_enc_dec(self):
@@ -290,13 +294,16 @@ class Encoder_Decoder():
         # get test data
         self.test_data_dict=self.data_processing_handler.get_test_data()
 
-        self.trainable_variables={'encoder':self.encoder_object.weights,'decoder':self.decoder_object.weights}
-    
+        #self.trainable_variables={'encoder':self.encoder_object.weights,'decoder':self.decoder_object.weights}
+        self.trainable_models={'encoder':self.encoder_object,'decoder':self.decoder_object}
+        self.best_trainable_models={'encoder':self.best_encoder_object,'decoder':self.best_decoder_object}
         # initialize optimizer
         self.__init_optimizer__()
 
-        opt_state=self.optimizer.init(self.trainable_variables)
-    
+        #opt_state=self.optimizer.init(self.trainable_variables)
+        
+        opt_state=self.optimizer.init(eqx.filter(self.trainable_models,eqx.is_inexact_array))
+
         # initialize training trackers
         self.best_training_loss=float('inf')
         self.best_test_loss=float('inf')
@@ -337,21 +344,32 @@ class Encoder_Decoder():
         data_dict=self.data_processing_handler.sample_training_data()
 
         # get value and grad
-        value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_variables,data_dict)
-            
+        #value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_variables,data_dict)
+        
+        #value,grad_loss=jax.value_and_grad(self.loss_fn,argnums=1,allow_int=True)(self.training_constants,self.trainable_models,data_dict)
+        #value,grad_loss=eqx.filter_value_and_grad(self.loss_fn,allow_int=True)(self.trainable_models,self.training_constants,data_dict)
+        
+        value,grad_loss=eqx.filter_value_and_grad(_loss_fn_autoencoder,allow_int=True)(self.trainable_models,self.training_constants,data_dict,self.stiffness_reduction)
+        #_loss_fn_autoencoder(networks,constants,data_dict,self.stiffness_reduction)
+        #value,grad_loss=eqx.filter_value_and_grad(_loss_fn_autoencoder,allow_int=True)(params,static,self.training_constants,data_dict,self.stiffness_reduction)
+
+
         #compute update to trainable variable
         if self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="adam":
             updates,opt_state=self.optimizer.update(grad_loss,opt_state)
         elif self.config_handler.get_config_status("encoder_decoder.training.optimizer")=="l-bfgs":
-            def loss_wrapper(trainable_vars):
-                return self.loss_fn(self.training_constants, trainable_vars, data_dict)
-            updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
-
+            def loss_wrapper(trainable_models):
+                return self.loss_fn(trainable_models, self.training_constants,data_dict)
+            updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_models,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
+            #updates,opt_state=self.optimizer.update(grad_loss, opt_state,self.trainable_variables,value=value,grad=grad_loss,value_fn=loss_wrapper) #self.optimizer.update(grad_loss,opt_state,self.trainable_variables_NODE)
         # get new value for trainable variable
-        results=optax.apply_updates(self.trainable_variables,updates)
+        #results=optax.apply_updates(self.trainable_variables,updates)
+        
+        results=eqx.apply_updates(self.trainable_models,updates)
 
         # update values
-        self.trainable_variables.update(results)
+        #self.trainable_variables.update(results)
+        self.trainable_models.update(results)
 
         # according to update criteria, update the encoder and decoder weights
         
@@ -359,7 +377,8 @@ class Encoder_Decoder():
 
             # update values in object, which is used to compute test error
 
-            error,cond_loss=self.test_error_compute(self.trainable_variables['encoder'],self.trainable_variables['decoder'])
+            #error,cond_loss=self.test_error_compute(self.trainable_variables['encoder'],self.trainable_variables['decoder'])
+            error,cond_loss=self.test_error_compute(self.trainable_models['encoder'],self.trainable_models['decoder'])
 
             self.test_loss_values.append(error)
             self.test_cond_loss_values.append(cond_loss)
@@ -370,15 +389,15 @@ class Encoder_Decoder():
             # log to mlflow
             log_to_mlflow_metrics({'enc_dec_training_loss':value,'enc_dec_test_loss':error,'enc_dec_test_cond_loss':cond_loss},train_step)
 
-            if  True:#error<self.best_test_loss:
+            if  error<self.best_test_loss:
                 self.logging_manager.log(f"New best test loss: {error}, recording weights")
                 self.best_test_loss=error
-                self.encoder_object.weights=self.trainable_variables['encoder']
-                self.decoder_object.weights=self.trainable_variables['decoder']
+                self.best_trainable_models['encoder']=deepcopy(self.trainable_models['encoder'])
+                self.best_trainable_models['decoder']=deepcopy(self.trainable_models['decoder'])
         
         return opt_state
 
-    def loss_fn(self,constants:dict[str,Any],networks:dict[str,jax.Array],data_dict:dict[str,jax.Array]):
+    def loss_fn(self,networks:dict[str,eqx.Module],constants:dict[str,Any],data_dict:dict[str,jax.Array]):
         """
         Compute the loss function for the autoencoder.
         
@@ -394,10 +413,10 @@ class Encoder_Decoder():
             jax.Array: Computed loss value
         """
 
-        return _loss_fn_autoencoder(constants,networks,data_dict,self.stiffness_reduction)
+        return _loss_fn_autoencoder(networks,constants,data_dict,self.stiffness_reduction)
 
     # plot predictions for a single trajectory
-    def test_error_compute(self,enc_weights,dec_weights,save_results:bool=False)->float:
+    def test_error_compute(self,enc_object:eqx.Module,dec_object:eqx.Module,save_results:bool=False)->float:
         """
         Compute test error and optionally save results.
         
@@ -424,9 +443,10 @@ class Encoder_Decoder():
 
         input_data=self.test_data_dict['input_data']
 
-        latent_space_preds=_forward_pass(input_data,enc_weights)
-        
-        input_preds=_forward_pass(latent_space_preds,dec_weights)
+        #latent_space_preds=_forward_pass(input_data,enc_weights)
+        latent_space_preds=enc_object(input_data)
+        #input_preds=_forward_pass(latent_space_preds,dec_weights)
+        input_preds=dec_object(latent_space_preds)
 
         # compute error
         # TODO: use a mask to ignore the extra time steps
@@ -479,26 +499,39 @@ class Encoder_Decoder():
         """
         Save the trained encoder and decoder models to disk.
         
-        This method serializes the encoder and decoder objects using pickle
+        This method serializes the encoder and decoder objects 
         and saves them to the configured model output directory.
         """
 
-        save_mats=[self.encoder_object,self.decoder_object]
+        eqx.tree_serialise_leaves(self.trainable_models,Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")))
 
-        with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'wb') as f: 
+        #save_tree=[self.encoder_object,self.decoder_object]
 
-            pickle.dump(save_mats,f,pickle.HIGHEST_PROTOCOL)
+        #with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'wb') as f: 
+
+        #    pickle.dump(save_mats,f,pickle.HIGHEST_PROTOCOL)
     def _load_enc_dec(self):
         """
         Load pre-trained encoder and decoder models from disk.
         
-        This method deserializes the encoder and decoder objects from pickle
-        files. Note: This is marked as TODO for standardization.
+        This method deserializes the encoder and decoder objects
+        files. 
         """
 
-        print("TODO : replace by standarized format loading")
-        with open(Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path")),'rb') as f:
-            self.encoder_object,self.decoder_object=pickle.load(f)
+        num_inputs=self.data_processing_handler.num_inputs
+        n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
+        hidden_state_size=self.config_handler.get_config_status("encoder_decoder.architecture.network_width")
+     
+        encoder_sizes=[num_inputs,hidden_state_size,n_latent_space]
+        decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
+
+        encoder_object=create_network_instance(encoder_sizes,self.config_handler)
+        decoder_object=create_network_instance(decoder_sizes,self.config_handler)
+
+        trainable_models_init={'encoder':encoder_object,'decoder':decoder_object}
+
+        load_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path"))
+        self.best_trainable_models=eqx.tree_deserialise_leaves(load_path,trainable_models_init)
 
     def visualize_results(self):
         """
