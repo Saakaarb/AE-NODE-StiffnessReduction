@@ -77,10 +77,10 @@ where
 4. Can be used on time series data in any timescale range (nanoseconds to seconds); utilizes several scaling and normalization tricks and conventions, some of which are discussed in [5].
 
 5. Built on well documented, standard libraries. These include
-  i. [Diffrax](https://docs.kidger.site/diffrax/) for training Neural ODEs
-  ii. [Equinox](https://docs.kidger.site/equinox/) for setting up neural networks
-  iii. [Optax](https://optax.readthedocs.io/en/latest/index.html) for running training network training
-  iv.  [MLFlow](https://mlflow.org/) tracking of experimental settings, results and artifacts. 
+  - [Diffrax](https://docs.kidger.site/diffrax/) for training Neural ODEs
+  - [Equinox](https://docs.kidger.site/equinox/) for setting up neural networks
+  - [Optax](https://optax.readthedocs.io/en/latest/index.html) for running training network training
+  -  [MLFlow](https://mlflow.org/) tracking of experimental settings, results and artifacts. 
 
 # Getting Started
 
@@ -243,7 +243,7 @@ Listed below are some best practices to avoid pitfalls for training Neural ODEs,
 
 This repo leverages techniques, ideas and APIs from the following works:
 
-1.[ChemNODE: A neural ordinary differential equations framework for efficient chemical kinetic solvers](https://www.sciencedirect.com/science/article/pii/S2666546821000677)
+1. [ChemNODE: A neural ordinary differential equations framework for efficient chemical kinetic solvers](https://www.sciencedirect.com/science/article/pii/S2666546821000677)
 
 2. [A data-driven reduced-order model for stiff chemical kinetics using dynamics-informed training](https://www.sciencedirect.com/science/article/pii/S2666546823000976)
 
