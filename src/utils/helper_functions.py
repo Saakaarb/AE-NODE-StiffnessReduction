@@ -1,23 +1,40 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
+import jax.random as jr
 import random
 import mlflow
+import equinox
+from src.utils.classes import ConfigReader, VMapMLP
 
 # for the system created by the script 2_eq_system.py
 
-@jax.jit
-def _forward_pass(network_input,network):
+# @jax.jit
+# def _forward_pass(network_input,network):
 
-    interm_comp=network_input
-    for i_layer in range(len(network[0])):
+#     interm_comp=network_input
+#     for i_layer in range(len(network[0])):
         
-        if i_layer!=len(network[0])-1:
-            interm_comp=jax.nn.tanh(interm_comp@network[0][i_layer]+network[1][i_layer])
-        else:
-            interm_comp=interm_comp@network[0][i_layer]+network[1][i_layer]
+#         if i_layer!=len(network[0])-1:
+#             interm_comp=jax.nn.tanh(interm_comp@network[0][i_layer]+network[1][i_layer])
+#         else:
+#             interm_comp=interm_comp@network[0][i_layer]+network[1][i_layer]
 
-    return interm_comp
+#     return interm_comp
+
+def create_network_instance(network_sizes:list,config_handler:ConfigReader)->equinox.Module:
+
+    if config_handler.get_config_status('encoder_decoder.architecture.network_type')=='mlp':
+
+        input_size=network_sizes[0]
+        output_size=network_sizes[-1]
+        hidden_size=network_sizes[1]
+        num_layers=config_handler.get_config_status('encoder_decoder.architecture.num_layers')
+        key = jr.PRNGKey(5678)
+        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key)
+
+    else:
+        raise ValueError(f"Network type {config_handler.get_config_status('encoder_decoder.architecture.network_type')} not supported")
 
 def standard_score_norm(feature_data):
 

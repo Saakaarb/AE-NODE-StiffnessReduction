@@ -100,7 +100,7 @@ To demonstrate the utility of the framework, we will create a model that learns 
 
 We will consider the following ranges of initial conditions:
 
-```
+```math
 Y_{F,init}=[0.03,0.1]
 Y_{Temp,init}=[1100,1300] K
 
