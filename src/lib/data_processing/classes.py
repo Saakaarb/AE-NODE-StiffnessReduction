@@ -78,6 +78,9 @@ class Data_Processing():
         self.dt_eps=1E-12 # used to add very small time steps to recorded time to keep time arrays strictly increasing
         self.precision_change_time_cutoff=1E-7 # time scale cutoff for changing precision from float32 to float64
 
+        self.end_time_scale=np.inf # maximum end time across all trajectories
+                              # this will be used as a scaling factor for NeuralODE output
+
         # load data file lists
         self.load_data_files()
 
@@ -171,30 +174,25 @@ class Data_Processing():
             if self.max_train_traj_size<self.num_timesteps_each_traj_train[i_traj]:
                 self.max_train_traj_size=int(self.num_timesteps_each_traj_train[i_traj])
 
+            end_time=time_data[-1]
+            if end_time < self.end_time_scale:
+                self.end_time_scale=end_time
 
-            # get (approx) standard score normalization parameters
-            if i_traj==0:
-                #mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out=standard_score_norm(feature_data)
-                #self.mean_vals_inp=mean_vals_inp
-                #self.std_vals_inp=std_vals_inp
-                #self.mean_vals_out=mean_vals_out
-                #self.std_vals_out=std_vals_out
-                #self.logging_manager.log("Warning: using only the first trajectory to get standard score normalization parameters")
-                self.end_time=time_data[-1]
-
-                if self.end_time < self.precision_change_time_cutoff:
+            if end_time < self.precision_change_time_cutoff:
                     if self.config_handler.get_config_status("neural_ode.training.precision")=='float32':
                         raise ValueError("The detected time scales of the system are too small to use 'float32' precision.\
                                           Please use 'float64' precision instead in config file at path: neural_ode.training.precision")
 
+            # get (approx) standard score normalization parameters
+            if i_traj==0:
+                
                 self.num_inputs=feature_data.shape[0]
                 self.latent_scaling=np.ones(int(self.config_handler.get_config_status("data_processing.latent_space_dim")))
                 # inferred from data
                 
                 self.config_handler.set_config_status("data_processing.num_inputs",self.num_inputs)
             else:
-                if time_data[-1]!=self.end_time:
-                    raise ValueError("End time is not the same for all trajectories!")
+                
                 if feature_data.shape[0]!=self.num_inputs:
                     raise ValueError("Number of inputs is not the same for all trajectories!")
 
@@ -298,7 +296,9 @@ class Data_Processing():
 
             all_input_data[i_traj,:int(self.num_timesteps_each_traj_train[i_traj]),:]=self.inputs_list_train[i_traj].T
             all_time_data[i_traj,:int(self.num_timesteps_each_traj_train[i_traj])]=self.times_list_train[i_traj]
-            all_time_data[i_traj,int(self.num_timesteps_each_traj_train[i_traj]):]=self.end_time+np.arange(1,self.max_train_traj_size-int(self.num_timesteps_each_traj_train[i_traj])+1)*self.dt_eps#times_list[i_traj]
+
+            # since diffrax requires increasing times, add very small time steps at the end to padded trajectories
+            all_time_data[i_traj,int(self.num_timesteps_each_traj_train[i_traj]):]=self.times_list_train[i_traj][-1]+np.arange(1,self.max_train_traj_size-int(self.num_timesteps_each_traj_train[i_traj])+1)*self.dt_eps#times_list[i_traj]
 
             start_end_time_data[i_traj,0]=self.times_list_train[i_traj][0]
             start_end_time_data[i_traj,1]=all_time_data[i_traj,-1]#self.times_list_train[i_traj][-1]
@@ -332,7 +332,7 @@ class Data_Processing():
 
             all_input_data[i_traj,:int(self.num_timesteps_each_traj_test[i_traj]),:]=self.inputs_list_test[i_traj].T
             all_time_data[i_traj,:int(self.num_timesteps_each_traj_test[i_traj])]=self.times_list_test[i_traj]
-            all_time_data[i_traj,int(self.num_timesteps_each_traj_test[i_traj]):]=self.end_time+np.arange(1,self.max_test_traj_size-int(self.num_timesteps_each_traj_test[i_traj])+1)*self.dt_eps#times_list[i_traj]
+            all_time_data[i_traj,int(self.num_timesteps_each_traj_test[i_traj]):]=self.times_list_test[i_traj][-1]+np.arange(1,self.max_test_traj_size-int(self.num_timesteps_each_traj_test[i_traj])+1)*self.dt_eps#times_list[i_traj]
 
             start_end_time_data[i_traj,0]=self.times_list_test[i_traj][0]
             start_end_time_data[i_traj,1]=all_time_data[i_traj,-1]#self.times_list_test[i_traj][-1]
@@ -524,7 +524,7 @@ class Data_Processing():
             "std_vals_inp":self.std_vals_inp, # standard deviation of inputs (Nsp+1)
             "mean_vals_out":self.mean_vals_out, # mean of outputs (Nsp)
             "std_vals_out":self.std_vals_out, # standard deviation of outputs (Nsp)
-            "end_time":self.end_time,
+            "end_time_scale":self.end_time_scale,
             "latent_scaling":self.latent_scaling,
         }
         return constants_dict
@@ -552,7 +552,7 @@ class Data_Processing():
             "std_vals_inp":self.std_vals_inp, # standard deviation of inputs (Nsp+1)
             "mean_vals_out":self.mean_vals_out, # mean of outputs (Nsp)
             "std_vals_out":self.std_vals_out, # standard deviation of outputs (Nsp)
-            "end_time":self.end_time,
+            "end_time_scale":self.end_time_scale,
             "latent_scaling":self.latent_scaling,
         }
         return constants_dict
@@ -682,7 +682,7 @@ class Data_Processing():
             f.attrs['num_train_traj'] = self.num_train_traj
             f.attrs['max_train_traj_size'] = self.max_train_traj_size
             f.attrs['num_inputs'] = self.num_inputs
-            f.attrs['end_time'] = self.end_time
+            f.attrs['end_time_scale'] = self.end_time_scale
             
             # Normalization parameters
             f.create_dataset('mean_vals_inp', data=self.mean_vals_inp)
@@ -707,7 +707,7 @@ class Data_Processing():
             f.attrs['num_test_traj'] = self.num_test_traj
             f.attrs['max_test_traj_size'] = self.max_test_traj_size
             f.attrs['num_inputs'] = self.num_inputs
-            f.attrs['end_time'] = self.end_time
+            f.attrs['end_time_scale'] = self.end_time_scale
             
             # Same normalization parameters (shared between train/test)
             f.create_dataset('mean_vals_inp', data=self.mean_vals_inp)
@@ -779,7 +779,7 @@ class Data_Processing():
             self.num_train_traj = f.attrs['num_train_traj']
             self.max_train_traj_size = f.attrs['max_train_traj_size']
             self.num_inputs = f.attrs['num_inputs']
-            self.end_time = f.attrs['end_time']
+            self.end_time_scale = f.attrs['end_time_scale']
             
             # Load normalization parameters
             self.mean_vals_inp = f['mean_vals_inp'][:]

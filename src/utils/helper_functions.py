@@ -33,9 +33,15 @@ def get_activation_function(activation_function:str):
     else:
         raise ValueError(f"Activation function {activation_function} not supported")
 
-def create_network_instance(network_sizes:list,config_handler:ConfigReader,logging_manager:LoggingManager,model_string:str)->equinox.Module:
+def create_network_instance(network_sizes:list,config_handler:ConfigReader,logging_manager:LoggingManager,model_string:str,constants:dict)->equinox.Module:
 
     if config_handler.get_config_status(f'{model_string}.architecture.network_type')=='mlp':
+
+        # the neural ODE needs output to be scaled by end time
+        if model_string=='neural_ode':
+            output_scale=1.0/constants['end_time_scale']
+        else:
+            output_scale=1.0
 
         input_size=network_sizes[0]
         output_size=network_sizes[-1]
@@ -49,8 +55,8 @@ def create_network_instance(network_sizes:list,config_handler:ConfigReader,loggi
         else:
             logging_manager.log(f"Activation function not specified in config file. Using default: relu")
             activation_function=jax.nn.relu
-
-        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function)
+        print(f"output_scale: {output_scale}")
+        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function,output_scale=output_scale)
 
     else:
         raise ValueError(f"Network type {config_handler.get_config_status(f'{model_string}.architecture.network_type')} not supported")

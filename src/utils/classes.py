@@ -85,8 +85,9 @@ class VMapMLP(eqx.Module):
     """
     
     mlp: eqx.nn.MLP
+    output_scale: float
     
-    def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh):
+    def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh, output_scale:float=1.0):
         """
         Initialize the VMapMLP wrapper.
         batch_axis: axis to apply vmap on
@@ -97,6 +98,7 @@ class VMapMLP(eqx.Module):
             depth: Number of hidden layers
             key: JAX random key for weight initialization
         """
+        self.output_scale=output_scale
         self.mlp = eqx.nn.MLP(
             in_size=in_size,
             width_size=width_size,
@@ -121,7 +123,7 @@ class VMapMLP(eqx.Module):
         f_time  = jax.vmap(self.mlp, in_axes=0, out_axes=0)
         f_batch = jax.vmap(f_time, in_axes=0, out_axes=0)
 
-        result=f_batch(x)   
+        result=f_batch(x)*self.output_scale
         
         return result
 

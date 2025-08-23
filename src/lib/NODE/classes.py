@@ -57,7 +57,7 @@ def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
     #https://arxiv.org/pdf/2103.15341
     #jax.debug.print("state shape in ode_fn: {x}",x=jnp.divide(state,scaling).shape)
     #derivatives=jnp.squeeze(_forward_pass(jnp.divide(state,scaling),trainable_variables_NODE['NODE']))*(1.0/constants['end_time']) # scaling included
-    derivatives=trainable_model_NODE(jnp.divide(state,scaling))*(1.0/constants['end_time']) # scaling included
+    derivatives=trainable_model_NODE(jnp.divide(state,scaling))#*(1.0/constants['end_time']) # scaling included
     #jax.debug.print("derivatives shape in ode_fn: {x}",x=derivatives.shape)
     return derivatives
 
@@ -367,7 +367,7 @@ class Neural_ODE():
 
         NODE_sizes=[n_latent_space,hidden_size_NODE,n_latent_space]
 
-        self.NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode')
+        self.NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode',self.constants)
         
         self.trainable_model_NODE={'NODE':self.NODE_object}
         self.best_model_NODE={'NODE':self.NODE_object}
@@ -651,7 +651,7 @@ class Neural_ODE():
 
         NODE_sizes=[n_latent_space,hidden_size_NODE,n_latent_space]
 
-        NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode')
+        NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode',self.constants)
 
         best_model_NODE={'NODE':NODE_object}
 
