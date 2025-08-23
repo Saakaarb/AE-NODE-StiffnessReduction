@@ -271,8 +271,8 @@ class Encoder_Decoder():
         decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
 
 
-        self.encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
-        self.decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
+        self.encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder',self.training_constants)
+        self.decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder',self.training_constants)
 
         self.best_encoder_object=deepcopy(self.encoder_object)
         self.best_decoder_object=deepcopy(self.decoder_object)
@@ -513,8 +513,8 @@ class Encoder_Decoder():
         encoder_sizes=[num_inputs,hidden_state_size,n_latent_space]
         decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
 
-        encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
-        decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder')
+        encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder',self.training_constants)
+        decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder',self.training_constants)
 
         trainable_models_init={'encoder':encoder_object,'decoder':decoder_object}
 
