@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import jax
 import optax
 import numpy as np
-from src.utils.classes import ConfigReader,LoggingManager
+from src.utils.classes import ConfigReader,LoggingManager,ModelSaver
 from src.utils.helper_functions import log_to_mlflow_metrics,log_to_mlflow_artifacts,create_network_instance
 from src.lib.data_processing.classes import Data_Processing
 from pathlib import Path
@@ -493,10 +493,13 @@ class Encoder_Decoder():
         and saves them to the configured model output directory.
         """
 
-        save_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path"))
-        
-        with open(save_path,'wb') as f:
-            eqx.tree_serialise_leaves(f,self.trainable_models)
+        encoder_save_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path_encoder"))
+        decoder_save_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path_decoder"))
+
+        model_saver_encoder=ModelSaver(self.config_handler,self.logging_manager)
+        model_saver_decoder=ModelSaver(self.config_handler,self.logging_manager)
+        model_saver_encoder.save_model(self.best_trainable_models['encoder'],encoder_save_path)
+        model_saver_decoder.save_model(self.best_trainable_models['decoder'],decoder_save_path)
 
     def _load_enc_dec(self):
         """
@@ -505,27 +508,18 @@ class Encoder_Decoder():
         This method deserializes the encoder and decoder objects
         files. 
         """
+        encoder_load_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path_encoder"))
+        decoder_load_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path_decoder"))
 
-        num_inputs=self.data_processing_handler.num_inputs
-        n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
-        hidden_state_size=self.config_handler.get_config_status("encoder_decoder.architecture.network_width")
-     
-        encoder_sizes=[num_inputs,hidden_state_size,n_latent_space]
-        decoder_sizes=[n_latent_space,hidden_state_size,num_inputs]
+        model_saver_encoder=ModelSaver(self.config_handler,self.logging_manager)
+        model_saver_decoder=ModelSaver(self.config_handler,self.logging_manager)
 
-        encoder_object=create_network_instance(encoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder',self.training_constants)
-        decoder_object=create_network_instance(decoder_sizes,self.config_handler,self.logging_manager,'encoder_decoder',self.training_constants)
+        self.encoder_object=model_saver_encoder.load_model(encoder_load_path)
+        self.decoder_object=model_saver_decoder.load_model(decoder_load_path)
 
-        trainable_models_init={'encoder':encoder_object,'decoder':decoder_object}
-
-        load_path=Path(self.config_handler.get_config_status("encoder_decoder.loading.model_output_dir"))/Path(self.config_handler.get_config_status("encoder_decoder.loading.load_path"))
-
-        with open(load_path,'rb') as f:
-            loadedbest_trainable_models=eqx.tree_deserialise_leaves(f,trainable_models_init)
-
-        self.best_trainable_models=loadedbest_trainable_models
-        self.encoder_object=loadedbest_trainable_models['encoder']
-        self.decoder_object=loadedbest_trainable_models['decoder']
+        self.best_trainable_models={}
+        self.best_trainable_models['encoder']=self.encoder_object
+        self.best_trainable_models['decoder']=self.decoder_object
 
     def visualize_results(self):
         """

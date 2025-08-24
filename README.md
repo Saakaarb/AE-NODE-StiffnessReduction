@@ -80,7 +80,9 @@ where
   - [Diffrax](https://docs.kidger.site/diffrax/) for training Neural ODEs
   - [Equinox](https://docs.kidger.site/equinox/) for setting up neural networks
   - [Optax](https://optax.readthedocs.io/en/latest/index.html) for running training network training
-  -  [MLFlow](https://mlflow.org/) tracking of experimental settings, results and artifacts. 
+  - [MLFlow](https://mlflow.org/) tracking of experimental settings, results and artifacts. 
+
+6. Models can be easily loaded and transferred to different format types (for ex using ONNX)
 
 # Getting Started
 
