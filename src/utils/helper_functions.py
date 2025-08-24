@@ -5,7 +5,7 @@ import jax.random as jr
 import random
 import mlflow
 import equinox
-from src.utils.classes import ConfigReader, VMapMLP,LoggingManager
+from src.utils.classes import ConfigReader, VMapMLP,LoggingManager,get_activation_function
 
 # for the system created by the script 2_eq_system.py
 
@@ -22,16 +22,6 @@ from src.utils.classes import ConfigReader, VMapMLP,LoggingManager
 
 #     return interm_comp
 
-def get_activation_function(activation_function:str):
-
-    if activation_function=='relu':
-        return jax.nn.relu
-    elif activation_function=='gelu':
-        return jax.nn.gelu
-    elif activation_function=='tanh':
-        return jax.nn.tanh
-    else:
-        raise ValueError(f"Activation function {activation_function} not supported")
 
 def create_network_instance(network_sizes:list,config_handler:ConfigReader,logging_manager:LoggingManager,model_string:str,constants:dict)->equinox.Module:
 
@@ -51,12 +41,14 @@ def create_network_instance(network_sizes:list,config_handler:ConfigReader,loggi
 
         # get activation function callable
         if config_handler.path_exists(f'{model_string}.architecture.activation_function'):
-            activation_function=get_activation_function(config_handler.get_config_status(f'{model_string}.architecture.activation_function'))
+            activation_name=config_handler.get_config_status(f'{model_string}.architecture.activation_function')
+            activation_function=get_activation_function(activation_name)
         else:
             logging_manager.log(f"Activation function not specified in config file. Using default: relu")
+            activation_name='relu'
             activation_function=jax.nn.relu
-        print(f"output_scale: {output_scale}")
-        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function,output_scale=output_scale)
+        
+        return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function,activation_name=activation_name,output_scale=output_scale)
 
     else:
         raise ValueError(f"Network type {config_handler.get_config_status(f'{model_string}.architecture.network_type')} not supported")

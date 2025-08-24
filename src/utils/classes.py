@@ -7,6 +7,20 @@ import logging
 import os
 from datetime import datetime
 from typing import Optional, Dict, Any,Callable
+import json
+from pathlib import Path
+
+def get_activation_function(activation_function:str):
+
+    if activation_function=='relu':
+        return jax.nn.relu
+    elif activation_function=='gelu':
+        return jax.nn.gelu
+    elif activation_function=='tanh':
+        return jax.nn.tanh
+    else:
+        raise ValueError(f"Activation function {activation_function} not supported")
+
 
 class ConfigReader():
     def __init__(self,config_filename:str)->None:
@@ -81,13 +95,21 @@ class VMapMLP(eqx.Module):
     A wrapper around eqx.nn.MLP that applies vmap on the batch dimension.
     
     This class ensures the model is a valid JAX pytree by inheriting from eqx.Module
-    and properly handling the MLP as a field.
+    and properly handling the MLP and all its parameters as a field.
     """
     
     mlp: eqx.nn.MLP
     output_scale: float
+    in_size: int
+    out_size: int
+    width_size: int
+    depth: int
+    activation_name: str
+    model_name: str
+    #key: jax.random.PRNGKey
+    #activation_function: Callable
     
-    def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh, output_scale:float=1.0):
+    def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh, activation_name:str='tanh', output_scale:float=1.0):
         """
         Initialize the VMapMLP wrapper.
         batch_axis: axis to apply vmap on
@@ -99,6 +121,15 @@ class VMapMLP(eqx.Module):
             key: JAX random key for weight initialization
         """
         self.output_scale=output_scale
+        self.in_size=in_size
+        self.out_size=out_size
+        self.width_size=width_size
+        self.depth=depth
+        self.activation_name=activation_name
+        self.model_name="mlp"
+        #self.key=key
+        #self.activation_function=activation_function
+        
         self.mlp = eqx.nn.MLP(
             in_size=in_size,
             width_size=width_size,
@@ -107,7 +138,7 @@ class VMapMLP(eqx.Module):
             key=key,
             activation=activation_function
         )
-    #@partial(jax.jit,static_argnums=(1,))
+    
     def __call__(self, x: jax.Array) -> jax.Array:
         """
         Forward pass with vmap applied to batch dimension.
@@ -130,49 +161,7 @@ class VMapMLP(eqx.Module):
 
     def __repr__(self):
         return f"VMapMLP(mlp={self.mlp})"
-'''
-#TODO probably needs to be created using equinox
 
-class MLP():
-
-    def __init__(self,network_sizes:list,config_handler:ConfigReader):
-
-        self.config_handler=config_handler
-        self.network_sizes=network_sizes
-
-    def initialize_network(self):
-
-        self.weights=self._init_xavier()
-
-    """
-    Xavier initialization technique for trainable weights: avoid
-    vanishing/exploding gradients during backprop
-
-    Arguments:
-    size: List that contains the size information of the Variable 
-    """
-    
-    def _init_xavier(self):
-
-        weights_list=[]
-        biases_list=[]
-        for i_layer in range(len(self.network_sizes)):
-
-            in_dim = self.network_sizes[i_layer][0]
-            out_dim = self.network_sizes[i_layer][1]
-            xavier_stddev = np.sqrt(2./(in_dim + out_dim))
-
-            # create weight matrix for layer
-            weight=jnp.array(np.random.normal(0,xavier_stddev,(in_dim,out_dim)))
-
-            bias=jnp.array(np.zeros([1,out_dim]))
-
-            weights_list.append(weight)
-            biases_list.append(bias)
-                                   
-        return [weights_list,biases_list]
-
-'''
 
 class LoggingManager:
     """
@@ -221,3 +210,55 @@ class LoggingManager:
         log_func = getattr(self.logger, level.lower())
         log_func(message)
 
+class ModelSaver():
+
+    def __init__(self, config_handler:ConfigReader,logging_manager:LoggingManager):
+
+        self.config_handler=config_handler
+        self.logging_manager=logging_manager
+
+    def save_model(self,model:eqx.Module,filename:str|Path):
+
+        self.model=model
+        # extract hyperparams
+        hyperparams={}
+        hyperparams["output_scale"]=float(self.model.output_scale)
+        hyperparams["in_size"]=int(self.model.in_size)
+        hyperparams["out_size"]=int(self.model.out_size)
+        hyperparams["width_size"]=int(self.model.width_size)
+        hyperparams["depth"]=int(self.model.depth)
+        hyperparams["activation_name"]=str(self.model.activation_name)
+        hyperparams["model_name"]=str(self.model.model_name)
+        # write model
+        #filename=Path(self.config_handler.get_config_status("model.loading.model_output_dir"))/Path(self.config_handler.get_config_status("model.loading.load_path_encoder"))
+        self.write_model(filename, hyperparams, self.model)
+
+    def write_model(self, filename:str|Path, hyperparams:dict, model:eqx.Module):
+        with open(filename, "wb") as f:
+            hyperparam_str = json.dumps(hyperparams)
+            f.write((hyperparam_str + "\n").encode())
+            eqx.tree_serialise_leaves(f, model)
+
+    # will always return a derived class of eqx.Module
+    def make_model(self, hyperparams:dict)->eqx.Module:
+        
+        in_size=hyperparams["in_size"]
+        out_size=hyperparams["out_size"]
+        width_size=hyperparams["width_size"]
+        depth=hyperparams["depth"]
+        activation_name=hyperparams["activation_name"]
+        output_scale=hyperparams["output_scale"]
+        activation_function=get_activation_function(activation_name)
+        model_name=hyperparams["model_name"]
+
+        if model_name=="mlp":
+            return VMapMLP(in_size=in_size,out_size=out_size,width_size=width_size,depth=depth,key=jax.random.PRNGKey(0),activation_function=activation_function,activation_name=activation_name,output_scale=output_scale)
+        else:
+            raise ValueError(f"Model name {model_name} not supported")
+   
+    def load_model(self, filename:str|Path)->eqx.Module:
+
+        with open(filename, "rb") as f:
+            hyperparams = json.loads(f.readline().decode())
+            model = self.make_model(hyperparams)
+            return eqx.tree_deserialise_leaves(f, model)

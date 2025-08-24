@@ -22,7 +22,8 @@ encoder_decoder:
         save_model: True # True/False
         load_model: False # True/False
         model_output_dir: 'encoder_decoder_weights'
-        load_path: 'encoder_decoder_weights.eqx' 
+        load_path_encoder: 'encoder_model.eqx' 
+        load_path_decoder: 'decoder_model.eqx' 
 
     architecture:
         network_type: 'mlp'
@@ -66,7 +67,7 @@ neural_ode:
         save_model: True # True/False
         load_model: False # True/False
         model_output_dir: 'NODE_weights'
-        load_path: 'NODE_weights.pkl' 
+        load_path: 'NODE_model.eqx' 
 
     architecture:
         network_type: 'mlp'

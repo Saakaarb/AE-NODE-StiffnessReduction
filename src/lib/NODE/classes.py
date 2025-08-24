@@ -8,7 +8,7 @@ from functools import partial
 import pickle
 import os
 from src.utils.helper_functions import log_to_mlflow_artifacts,log_to_mlflow_metrics,create_network_instance
-from src.utils.classes import ConfigReader,LoggingManager,VMapMLP
+from src.utils.classes import ConfigReader,LoggingManager,VMapMLP,ModelSaver
 from src.lib.data_processing.classes import Data_Processing
 from src.lib.autoencoder.classes import Encoder_Decoder
 from diffrax import RESULTS
@@ -632,9 +632,8 @@ class Neural_ODE():
         """
 
         save_path=Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path"))
-        
-        with open(save_path,'wb') as f:
-            eqx.tree_serialise_leaves(f,self.best_model_NODE)
+        model_saver=ModelSaver(self.config_handler,self.logging_manager)
+        model_saver.save_model(self.best_model_NODE['NODE'],save_path)
 
     def load_NODE_model(self):
         """
@@ -643,20 +642,11 @@ class Neural_ODE():
         This method deserializes the Neural ODE object from pickle
         files and loads it into the current instance.
         """
-        
+
         load_path=Path(self.config_handler.get_config_status("neural_ode.saving.model_output_dir"))/Path(self.config_handler.get_config_status("neural_ode.saving.load_path"))
-
-        n_latent_space=self.config_handler.get_config_status("data_processing.latent_space_dim")
-        hidden_size_NODE=self.config_handler.get_config_status("neural_ode.architecture.network_width")
-
-        NODE_sizes=[n_latent_space,hidden_size_NODE,n_latent_space]
-
-        NODE_object=create_network_instance(NODE_sizes,self.config_handler,self.logging_manager,'neural_ode',self.constants)
-
-        best_model_NODE={'NODE':NODE_object}
-
-        with open(load_path,'rb') as f:
-            self.best_model_NODE=eqx.tree_deserialise_leaves(f,best_model_NODE)
+        model_saver=ModelSaver(self.config_handler,self.logging_manager)
+        self.best_model_NODE={}
+        self.best_model_NODE['NODE']=model_saver.load_model(load_path)
 
 
     def save_predictions(self,predictions_list:dict[str,list[np.ndarray]],true_list:dict[str,list[np.ndarray]]):
