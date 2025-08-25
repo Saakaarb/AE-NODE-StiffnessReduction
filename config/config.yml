@@ -50,7 +50,7 @@ encoder_decoder:
         simultaneous_training: False # True/False
 
         # loss function
-        stiffness_reduction_weight: 1E-6 # weight for stiffness reduction loss
+        stiffness_reduction_weight: 1E-4 # weight for stiffness reduction loss
     
     testing:
         test_model: True # True/False
@@ -90,7 +90,7 @@ neural_ode:
 
         # batch processing
         num_training_iters: 1000 # for l-bfgs use max 200 steps, for adam use 10000
-        
+        time_scale: 5E-4 # 5E-4 is the time scale of the system
         print_freq: 100
 
         simultaneous_training: False # True/False
