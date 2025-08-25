@@ -67,18 +67,20 @@ def _compute_condition_number_norm(data_dict:dict[str,jax.Array],latent_space_pr
     cond_2_mask=data_dict['cond_2_mask']
 
     dt = jnp.diff(time_data, axis=1)  # Shape: [batch, time-1, features]
+    
     dlatent = jnp.diff(latent_space_preds, axis=1)  # Shape: [batch, time-1, features]
-
+    #jax.debug.print("dlatent :{x}",x=dlatent)
     # Compute derivatives
     cond_1 = jnp.divide(dlatent[:,1:,:], dt[:,1:,:] + eps_dt) * cond_1_mask
     cond_2 = jnp.divide(dlatent[:,:-1,:], dt[:,:-1,:] + eps_dt) * cond_2_mask
-
+    
     cond_numer= jnp.sqrt(jnp.mean(jnp.square(cond_1-cond_2)+eps,axis=1))
-
-    cond_3 = jnp.sqrt(jnp.mean(jnp.square(dlatent[:,1:,:] - dlatent[:,:-1,:]), axis=1))
-
+    
+    #cond_3 = jnp.sqrt(jnp.mean(jnp.square(dlatent[:,1:,:] - dlatent[:,:-1,:]), axis=1))
+    #cond_3 = jnp.abs(jnp.mean(jnp.abs(latent_space_preds[:,2:,:] - latent_space_preds[:,:-2,:])+eps, axis=1))
+    cond_3 = jnp.sqrt(jnp.mean(jnp.square(latent_space_preds[:,2:,:] - latent_space_preds[:,:-2,:])+eps, axis=1))
     cond_loss=jnp.mean(cond_numer/(cond_3))
-
+    
     return cond_loss
 
 #@partial(jax.jit,static_argnums=(3,))
@@ -123,7 +125,7 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
 
     # construct reconstruction
     recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
-
+    
     # condition number regularization
     # this section takes an approximation of the condition number as described in:
     # Stiffness-Reduced Neural ODE Models for Data-Driven Reduced-Order Modeling of Combustion Chemical Kinetics: Dikeman, Zhang and Yang (2022)
@@ -132,6 +134,7 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     if stiffness_reduction:
         #jax.debug.print("stiffness reduction")
         cond_loss=_compute_condition_number_norm(data_dict,latent_space_preds)
+        
     else:
         cond_loss=jnp.zeros(())
     
