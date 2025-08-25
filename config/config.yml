@@ -1,9 +1,9 @@
 data_processing:
 
     saving_loading:
-        load_data: True # True/False
+        load_data: False # True/False
         save_data: True # True/False
-        raw_data_path: "raw_data/mild_combustion_solutions"
+        raw_data_path: "raw_data/split_k_4_mild_comb_soln"
         processed_data_path: "processed_data"
 
     # data processing information
@@ -20,7 +20,7 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: True # True/False
+        load_model: False # True/False
         model_output_dir: 'encoder_decoder_weights'
         load_path_encoder: 'encoder_model.eqx' 
         load_path_decoder: 'decoder_model.eqx' 
@@ -41,7 +41,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 30000
+        num_training_iters: 6000 # for l-bfgs use max 200 steps, for adam use 30000
         
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
@@ -50,7 +50,7 @@ encoder_decoder:
         simultaneous_training: False # True/False
 
         # loss function
-        stiffness_reduction_weight: 1E-4 # weight for stiffness reduction loss
+        stiffness_reduction_weight: 1E-6 # weight for stiffness reduction loss
     
     testing:
         test_model: True # True/False
@@ -90,7 +90,7 @@ neural_ode:
 
         # batch processing
         num_training_iters: 1000 # for l-bfgs use max 200 steps, for adam use 10000
-        time_scale: 5E-4 # 5E-4 is the time scale of the system
+        time_scale: 5E-3 
         print_freq: 100
 
         simultaneous_training: False # True/False
