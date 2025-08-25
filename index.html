@@ -18,7 +18,8 @@
       <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -40,11 +41,11 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <!-- Local TOC -->
-              <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">AE-NODE-StiffnessReduction documentation</a></li>
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 </ul>
-</div>
+
         </div>
       </div>
     </nav>
@@ -71,17 +72,51 @@
              
   <section id="ae-node-stiffnessreduction-documentation">
 <h1>AE-NODE-StiffnessReduction documentation<a class="headerlink" href="#ae-node-stiffnessreduction-documentation" title="Link to this heading"></a></h1>
-<p>Add your content using <code class="docutils literal notranslate"><span class="pre">reStructuredText</span></code> syntax. See the
-<a class="reference external" href="https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html">reStructuredText</a>
-documentation for details.</p>
+</section>
+<section id="introduction">
+<h1>Introduction<a class="headerlink" href="#introduction" title="Link to this heading"></a></h1>
+<p>This repository contains an open source implementation of Autoencoder Neural Ordinary Differential Equations (NODE) with dimension reduction and stiffness reduction for surrogate modeling of stiff and irregular time series data. This repository is a GPU-efficient open-source implementation of NODEs for irregularly sampled time series (with potentially different trajectory lengths) data with dimension reduction and stiffness reduction:</p>
+<ul class="simple">
+<li><p>Run through a easy-to-read config file</p></li>
+<li><p>Simple, extendable API</p></li>
+<li><p>Supports irregularly sampled trajectories with uneven trajectory sizes across datapoints</p></li>
+<li><p>Uses a dimension-reduction autoencoder that maps to a stiffness-reduced latent space for faster integration</p></li>
+<li><p>Includes a NeuralODE implementation in latent space</p></li>
+<li><p>Implementations optimized for GPU for faster training via masking, vectorization and efficient JAX use.</p></li>
+</ul>
+</section>
+<section id="why-ae-node-stiffnessreduction">
+<h1>Why AE-NODE-StiffnessReduction?<a class="headerlink" href="#why-ae-node-stiffnessreduction" title="Link to this heading"></a></h1>
+<blockquote>
+<div><p>Modeling of irregularly-sampled time series data that may exhibit stiffness characteristics (for eg. multiple, order-of-magnitude different time scales of feature evolution) is an open and challenging problem. For example, hydrocarbon combustion models are a system of very stiff ODEs. The cost of solving these stiff ODEs at every node (measuring in millions) in a large simulation is prohibitive. A surrogate model that can accurately make predictions in a stiffness reduced manifold is exceptionally useful to use in place of the full equation system while simulating, reducing the cost of integration by order of magnitude.</p>
+</div></blockquote>
+<p>Recent works have leveraged machine learning to create models that reduce the cost of solving these differential equations. In particular, Neural ODEs have been used in a wide variety of scientific applications, combining data driven modeling and scientific computing techniques. However, they are autoregressive models, and come with training challenges, from both a stability and efficiency perspective:</p>
+<ol class="arabic simple">
+<li><p>They can be difficult to train on long time horizons, or on datasets with features exhibiting stiff behavior, as their rollouts can become unstable and diverge.</p></li>
+<li><p>They are also nontrivial to effectively parallelize on a GPU, given their autoregressive nature.</p></li>
+<li><p>There are very few open-source implementations of NeuralODEs for time-series modeling of stiff, challenging problems.</p></li>
+</ol>
+<p>This library is a ready-to-use implementation of stiffness-reduced Neural ODEs with a simple configuration file to run easy experiments.</p>
 <div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#utility-classes-and-functions">Utility Classes and Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#neural-ode-implementation">Neural ODE Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#autoencoder-implementation">Autoencoder Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#data-processing">Data Processing</a></li>
+</ul>
+</li>
+</ul>
 </div>
 </section>
 
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="api.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
