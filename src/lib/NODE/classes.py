@@ -592,7 +592,7 @@ class Neural_ODE():
             # dimension of solution: [nts,1,1,n_dimension]
             solution=_integrate_NODE(self.test_constants,self.best_model_NODE,self.enc_dec_models,self.test_data_dict,i_traj,max_traj_size) 
 
-            jax.debug.print("solution.ys shape: {x}",x=solution.ys.shape)
+            #jax.debug.print("solution.ys shape: {x}",x=solution.ys.shape)
 
             # check if integration failed
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:
@@ -603,8 +603,8 @@ class Neural_ODE():
             latent_space_pred=jnp.expand_dims(jnp.squeeze(solution.ys),axis=0)
             phys_space_pred_int=self.enc_dec_models['decoder'](latent_space_pred) #_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
 
-            print("phys_space_pred_int: ",phys_space_pred_int)
-            print("phys_space_pred_int shape: ",phys_space_pred_int.shape)
+            #print("phys_space_pred_int: ",phys_space_pred_int)
+            #print("phys_space_pred_int shape: ",phys_space_pred_int.shape)
             # unscale predicted ys
             # std_vals and mean_vals are of shape (1,num_inputs)
             #phys_space_pred_int=phys_space_pred_int*std_vals_inp+mean_vals_inp
@@ -612,8 +612,8 @@ class Neural_ODE():
             pred_ys[i_traj,:,:]=phys_space_pred_int*std_vals_inp+mean_vals_inp
             pred_ts[i_traj,:]=solution.ts
 
-            print("pred_ys: ",pred_ys)
-            print("pred_ys shape: ",pred_ys.shape)
+            #print("pred_ys: ",pred_ys)
+            #print("pred_ys shape: ",pred_ys.shape)
 
             #true soln
             true_ys=self.test_data_dict['input_data'][i_traj,:,:]*std_vals_inp+mean_vals_inp

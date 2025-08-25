@@ -30,8 +30,8 @@ def create_network_instance(network_sizes:list,config_handler:ConfigReader,loggi
         # the neural ODE needs output to be scaled by end time
         if model_string=='neural_ode':
             # if time scale is provided, use it to scale the output
-            if config_handler.get_config_status('neural_ode.architecture.time_scale') is not None:
-                output_scale=1.0/config_handler.get_config_status('neural_ode.architecture.time_scale')
+            if config_handler.get_config_status('neural_ode.training.time_scale') is not None:
+                output_scale=1.0/float(config_handler.get_config_status('neural_ode.training.time_scale'))
             else:
                 # if time scale is not provided, it is automatically inferred from the data
                 output_scale=1.0/constants['end_time_scale']
