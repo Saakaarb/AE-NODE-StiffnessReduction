@@ -198,12 +198,6 @@ class Data_Processing():
 
             #network_input=(feature_data-np.expand_dims(self.mean_vals_inp,axis=1))/np.expand_dims(self.std_vals_inp,axis=1)            
 
-            #print("network input: ",network_input)
-            #print("feature data: ",feature_data)
-            #print("mean vals inp: ",self.mean_vals_inp)
-            #print("std vals inp: ",self.std_vals_inp)
-            #input("check")
-
             self.times_list_train.append(time_data)
             self.feature_list_train.append(feature_data)
             #self.inputs_list_train.append(network_input)
