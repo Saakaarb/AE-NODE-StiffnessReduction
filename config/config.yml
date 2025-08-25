@@ -1,17 +1,17 @@
 data_processing:
 
     saving_loading:
-        load_data: False # True/False
+        load_data: True # True/False
         save_data: True # True/False
-        raw_data_path: "raw_data/script_data"
+        raw_data_path: "raw_data/mild_combustion_solutions"
         processed_data_path: "processed_data"
 
     # data processing information
     train_split_ratio: 0.95
     check_raw_data_shape: True
-    total_available_features: 7 # the total number of features in the data. This does NOT include time,
+    total_available_features: 5 # the total number of features in the data. This does NOT include time,
                                 # assumed to be the first row/column (at index 0)
-    feature_train_index: [1,2,3,4,5,7] #the row/column indices (0 indexed) from the dataset files of which species should be in the training set
+    feature_train_index: [1,2,3,4,5] #the row/column indices (0 indexed) from the dataset files of which species should be in the training set
                                         # DO NOT include 0 (assumed to be time); this will raise an error
     data_arrange_mode: 'row_major' # row_major: each datapoint is a row in the data files, column_major: each datapoint is a column in the data files
     latent_space_dim: 2
@@ -20,7 +20,7 @@ data_processing:
 encoder_decoder:
     loading:
         save_model: True # True/False
-        load_model: False # True/False
+        load_model: True # True/False
         model_output_dir: 'encoder_decoder_weights'
         load_path_encoder: 'encoder_model.eqx' 
         load_path_decoder: 'decoder_model.eqx' 
@@ -41,7 +41,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 200 # for l-bfgs use max 200 steps, for adam use 30000
+        num_training_iters: 10000 # for l-bfgs use max 200 steps, for adam use 30000
         
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
@@ -50,7 +50,7 @@ encoder_decoder:
         simultaneous_training: False # True/False
 
         # loss function
-        stiffness_reduction_weight: 1E-9 # weight for stiffness reduction loss
+        stiffness_reduction_weight: 1E-4 # weight for stiffness reduction loss
     
     testing:
         test_model: True # True/False
@@ -84,13 +84,13 @@ neural_ode:
         learning_rate_decay: 0.7
         learning_rate_decay_steps: 1000
 
-        precision: 'float64' # 'float32' or 'float64'
+        precision: 'float32' # 'float32' or 'float64'
                              # if the time scale of the system is very small (< 1E-7), use float64
                              # else diffrax will perform poorly
 
         # batch processing
-        num_training_iters: 300 # for l-bfgs use max 200 steps, for adam use 10000
-        
+        num_training_iters: 1000 # for l-bfgs use max 200 steps, for adam use 10000
+        time_scale: 5E-4 # 5E-4 is the time scale of the system
         print_freq: 100
 
         simultaneous_training: False # True/False
