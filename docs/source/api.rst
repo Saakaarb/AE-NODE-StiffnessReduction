@@ -2,7 +2,7 @@ API Reference
 =============
 
 Utility Classes and Functions
-----------------------------
+-----------------------------
 
 .. automodule:: src.utils.classes
    :members:
@@ -15,7 +15,7 @@ Utility Classes and Functions
    :show-inheritance:
 
 Neural ODE Implementation
-------------------------
+-------------------------
 
 .. automodule:: src.lib.NODE.classes
    :members:
@@ -23,7 +23,7 @@ Neural ODE Implementation
    :show-inheritance:
 
 Autoencoder Implementation
--------------------------
+--------------------------
 
 .. automodule:: src.lib.autoencoder.classes
    :members:
@@ -32,6 +32,10 @@ Autoencoder Implementation
 
 Data Processing
 ---------------
+.. automodule:: src.lib.data_processing.classes
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 .. automodule:: src.lib.data_processing.classes
    :members:
