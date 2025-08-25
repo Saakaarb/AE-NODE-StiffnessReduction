@@ -58,6 +58,7 @@ def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
     #jax.debug.print("state shape in ode_fn: {x}",x=jnp.divide(state,scaling).shape)
     #derivatives=jnp.squeeze(_forward_pass(jnp.divide(state,scaling),trainable_variables_NODE['NODE']))*(1.0/constants['end_time']) # scaling included
     derivatives=trainable_model_NODE(jnp.divide(state,scaling))#*(1.0/constants['end_time']) # scaling included
+    #jax.debug.print("derivatives: {x}",x=derivatives)
     #jax.debug.print("derivatives shape in ode_fn: {x}",x=derivatives.shape)
     return derivatives
 
@@ -121,7 +122,8 @@ def _integrate_NODE(constants: dict[str,Any],trainable_model_NODE: dict[str,VMap
     solution = diffrax.diffeqsolve(term,diffrax.Heun(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_model_NODE':trainable_model_NODE,'i_traj':i_traj},throw=False,
                                     max_steps=max_traj_size-1,stepsize_controller=stepsize_controller)
-   
+    #jax.debug.print("solution.ts: {x}",x=solution.ts)
+    #jax.debug.print("solution.ys: {x}",x=solution.ys)
     return solution
 
 
@@ -167,23 +169,29 @@ def _loss_fn_NODE(trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any]
 
         solution=_integrate_NODE(constants,trainable_model_NODE,enc_dec_models,data_dict,i_traj,max_traj_size)
 
+        #jax.debug.print("solution.ts: {x}",x=solution.ts.shape)
+        #jax.debug.print("solution.ys: {x}",x=solution.ys.shape)
+
         failed = jnp.logical_or(solution.result == RESULTS.max_steps_reached, solution.result==RESULTS.singular)
 
         # predicted output in latent space
         # reshape to [1,Nts,latent_dim]
         latent_space_pred=jnp.expand_dims(jnp.squeeze(solution.ys),axis=0)
+        #jax.debug.print("latent_space_pred: {x}",x=latent_space_pred.shape)
         # prediction after integration
         phys_space_pred_int=enc_dec_models['decoder'](latent_space_pred) #_forward_pass(latent_space_pred,enc_dec_models['decoder'])
-        
+        #jax.debug.print("phys_space_pred_int: {x}",x=phys_space_pred_int.shape)
         #jax.debug.print("loss_L1: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
         loss_L1=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(phys_space_pred_int,recon_mask_curr)-jnp.multiply(phys_data,recon_mask_curr)))))
         
         # latent space truth
         latent_space_truth=enc_dec_models['encoder'](phys_data) #_forward_pass(phys_data,enc_dec_models['encoder'])
+        #jax.debug.print("latent_space_truth: {x}",x=latent_space_truth.shape)
 
         #jax.debug.print("loss_L3: {x}",x=jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
         loss_L3=jnp.where(failed,1E5,jnp.sqrt(jnp.mean(jnp.square(jnp.multiply(latent_space_pred,latent_space_mask_curr)-jnp.multiply(latent_space_truth,latent_space_mask_curr)))))
-       
+        #jax.debug.print("loss_L1: {x}",x=loss_L1)
+        #jax.debug.print("loss_L3: {x}",x=loss_L3)
         return loss_L1, loss_L3, jnp.where(failed,0.0,1.0)
 
     # Vectorize over all trajectories
@@ -240,6 +248,8 @@ class Neural_ODE():
         self.config_handler=config_handler
         self.data_processing_handler=data_processing_handler
         self.encoder_decoder_handler=encoder_decoder_handler
+        self.enc_dec_models={'encoder':self.encoder_decoder_handler.encoder_object,
+                              'decoder':self.encoder_decoder_handler.decoder_object}
         self.logging_manager=logging_manager
         # get training constants
         self.constants=self.data_processing_handler.get_training_constants()
@@ -371,8 +381,7 @@ class Neural_ODE():
         
         self.trainable_model_NODE={'NODE':self.NODE_object}
         self.best_model_NODE={'NODE':self.NODE_object}
-        self.enc_dec_models={'encoder':self.encoder_decoder_handler.encoder_object,
-                              'decoder':self.encoder_decoder_handler.decoder_object}
+        
 
         #if self.trainable_enc_dec:
 
@@ -589,10 +598,13 @@ class Neural_ODE():
             if solution.result==RESULTS.max_steps_reached or solution.result==RESULTS.singular:
                 self.logging_manager.log(f"Integration failed for trajectory {i_traj+1} of {num_test_traj}")
                 
+            
             # convert to [1,nts,n_dimension]
             latent_space_pred=jnp.expand_dims(jnp.squeeze(solution.ys),axis=0)
             phys_space_pred_int=self.enc_dec_models['decoder'](latent_space_pred) #_forward_pass(latent_space_pred,enc_dec_weights['decoder'])
 
+            print("phys_space_pred_int: ",phys_space_pred_int)
+            print("phys_space_pred_int shape: ",phys_space_pred_int.shape)
             # unscale predicted ys
             # std_vals and mean_vals are of shape (1,num_inputs)
             #phys_space_pred_int=phys_space_pred_int*std_vals_inp+mean_vals_inp
@@ -600,6 +612,8 @@ class Neural_ODE():
             pred_ys[i_traj,:,:]=phys_space_pred_int*std_vals_inp+mean_vals_inp
             pred_ts[i_traj,:]=solution.ts
 
+            print("pred_ys: ",pred_ys)
+            print("pred_ys shape: ",pred_ys.shape)
 
             #true soln
             true_ys=self.test_data_dict['input_data'][i_traj,:,:]*std_vals_inp+mean_vals_inp

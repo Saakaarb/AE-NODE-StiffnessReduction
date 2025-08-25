@@ -121,6 +121,7 @@ class VMapMLP(eqx.Module):
             key: JAX random key for weight initialization
         """
         self.output_scale=output_scale
+        #print("Output scale in VMapMLP: ",self.output_scale)
         self.in_size=in_size
         self.out_size=out_size
         self.width_size=width_size
@@ -150,7 +151,7 @@ class VMapMLP(eqx.Module):
             Output tensor with same batch and time dimensions
         """
         
-        
+        #jax.debug.print("output scale in call: {x}",x=self.output_scale)
         f_time  = jax.vmap(self.mlp, in_axes=0, out_axes=0)
         f_batch = jax.vmap(f_time, in_axes=0, out_axes=0)
 
