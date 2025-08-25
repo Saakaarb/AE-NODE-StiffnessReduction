@@ -1,3 +1,14 @@
+# Table of Contents
+- [Introduction](#introduction)
+- [Value Proposition](#value-proposition)
+- [Key Features](#key-features)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Best Practices](#best-practices)
+- [Acknowledgements](#acknowledgements)
+- [Directory Structure](#directory-structure)
+- [Upcoming Improvements](#upcoming-improvements)
+
 # Introduction
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -17,26 +28,7 @@ Recent works have leveraged machine learning to create models that reduce the co
 
 2. They are also nontrivial to effectively parallelize on a GPU, given their autoregressive nature. 
 
-# Installation
 
-Clone this repo:
-
-```
-git clone git@github.com:Saakaarb/AE-NODE-StiffnessReduction.git
-```
-
-And then create a virtual env, and activate it:
-
-```
-python/python3 -m venv venv
-source venv/bin/activate
-```
-
-Finally, install the requirements
-
-```
-pip install -r requirements.txt
-```
 
 # Key Features
 
@@ -82,7 +74,28 @@ where
   - [Optax](https://optax.readthedocs.io/en/latest/index.html) for running training network training
   - [MLFlow](https://mlflow.org/) tracking of experimental settings, results and artifacts. 
 
-6. Models can be easily loaded and transferred to different format types (for ex using ONNX)
+6. Models can be easily loaded and transferred to different format types (for example, using ONNX)
+
+# Installation
+
+Clone this repo:
+
+```
+git clone git@github.com:Saakaarb/AE-NODE-StiffnessReduction.git
+```
+
+And then create a virtual env, and activate it:
+
+```
+python/python3 -m venv venv
+source venv/bin/activate
+```
+
+Finally, install the requirements
+
+```
+pip install -r requirements.txt
+```
 
 # Getting Started
 
@@ -131,6 +144,31 @@ feat5 1.290142861281983187e+03,1.330740917367549628e+03,1.376281295596508699e+03
 ## Step 2: Configuration file
 
 The config file is in tutorial/tutorial_config.yml. It has been set up to run easily.
+
+```
+data_processing:
+
+    saving_loading:
+        load_data: False # True/False
+        save_data: True # True/False
+        raw_data_path: "raw_data/mild_combustion_solutions"
+        processed_data_path: "processed_data"
+
+    # data processing information
+    train_split_ratio: 0.95
+    check_raw_data_shape: True
+    total_available_features: 5 # the total number of features in the data. This does NOT include time,
+                                # assumed to be the first row/column (at index 0)
+    feature_train_index: [1,2,3,4,5] #the row/column indices (0 indexed) from the dataset files of which species should be in the training set
+                                        # DO NOT include 0 (assumed to be time); this will raise an error
+    data_arrange_mode: 'row_major' # row_major: each datapoint is a row in the data files, column_major: each datapoint is a column in the data files
+    latent_space_dim: 2
+    num_samples_per_batch: 1024
+.
+.
+.
+
+```
 
 ## Step 3: Running the training
 
@@ -224,23 +262,35 @@ The corresponding latent space solution can be plotted with time, and it is easy
 </p>
 
 
-
 # Best Practices
 
-Listed below are some best practices to avoid pitfalls for training Neural ODEs, using this framework or in general:
+Listed below are some best practices to avoid pitfalls for training Neural ODEs, using this framework or in general.
+
+1. There are a couple of critical hyper-parameters that may have to be tuned to obtain best performance in fitting stiff data. These are:
+  - encoder_decoder.training.stiffness_reduction_weight: controls the weight of the stiffness reduction term in autoencoder training. the autoencoder loss term is of the form
+
+  ```math
+  Loss= L_{reconstruction} + \lambda L_{CN}
+  ```
+  
+   where $L_{reconstruction}$ is the reconstruction error, $L_{CN}$ is the condition number regulzarization (stiffness reduction) and $\lambda$ is the weight. If $\lambda$ is too large, the autoencoder will not train successfully, and if too small, the latent space may not be stiffness-reduced. The user should look at the relative magnitudes of the test_error and test_cond_loss (condition number regularization loss) and make them approximately equal. For example, if test_error is 0.1 and test_cond_loss is 10^(3), stiffness_reduction_weight can be 1E-4. This can also be set to "auto", but it may lead to suboptimal results.
+
+  - neural_ode.training.time_scale: an approximate time scale at which processes in the system occur. This is not necessarily the end-time of the system. For example, the time data of the system might be present till t=0.1, but if most dynamics occur at a time-scale of 1E-3, then this time-scale may be set accordingly.
 
 1. Train the encoder-decoder to as low an error as possible; incorrect encoder-decoder predictions cause NODE training  to fail quickly.
 
 2. You have the option of selecting which rows/columns to include in the training set. Make sure all features 
    that are causative are included in the training data. For example, if modeling a chemical reaction, by not including the temperature, the network cannot learn the appropriate cause effect relationships from data and this will result in a poor model.
 
-3. Do not have long tails in training trajectories where no "kinetics" or actions occur. For example, while simulating a combustion reaction, for every training trajectory if the reaction is complete in a maximum of ~10^(-4) seconds, do not use data lasting upto 10^(-2) seconds. This creates a long tailed trajectory where the NODE must learn to predict 0 (which it does not do effectively) and also reduces the effectiveness of critical scaling tricks borrowed from [5]. (add images)
+3. Do not have long tails in training trajectories where no "kinetics" or actions occur. For example, while simulating a combustion reaction, for every training trajectory if the reaction is complete in a maximum of ~10^(-4) seconds, do not use data lasting upto 10^(-2) seconds. This creates a long tailed trajectory where the NODE must learn to predict 0 (which it does not do effectively) and also reduces the effectiveness of critical scaling tricks borrowed from [5]. 
 
 4. If the system timescale is very small (max time < 10^(-7)), always use fp64 training (set in config: neural_ode.training.precision) instead of fp32. This is because of a (current) known issue in diffrax (issue #660). If the time scale of the system are larger, use fp32 for faster, more efficient training.
 
 5. When training the encoder-decoder with stiffness reduction, play around with the value of the stiffness reduction coefficient by observing the relative magnitude of "test error" and "test cond loss" printed while training. "test error" and "stiffness_reduction_weight*test_cond_loss" should be roughly the same O.O.M for effective training.
 
-6. Try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
+6. The trajectory length of the data is a key design choice in training autoregressive models. Technically, a single trajectory can be split into K sub trajectories. This has the benefit of being much more GPU efficient, and being more stable during training. This method is also called teacher-forcing. However, the network learns to predict over shorter trajectories and may be unable to predict entire trajectories during inference. On the other hand, training over the entire trajectory, while being GPU inefficient, forces BPTT (BackPropagation-Through-Time) which enables more accurate learning. This is a design choice the user must make.
+
+7. Try and make key hyper-parameters a power of 2. Key ones include network widths, samples per batch. This allows for more optimum GPU training.
 
 # Acknowledgements
 
@@ -282,7 +332,7 @@ AE-NODE-StiffnessReduction/
 └── requirements.txt        # Python dependencies
 ```
 
-# Improvements to come
+# Upcoming Improvements
 
 - Further GPU optimization
 - Tests
