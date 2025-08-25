@@ -29,7 +29,12 @@ def create_network_instance(network_sizes:list,config_handler:ConfigReader,loggi
 
         # the neural ODE needs output to be scaled by end time
         if model_string=='neural_ode':
-            output_scale=1.0/constants['end_time_scale']
+            # if time scale is provided, use it to scale the output
+            if config_handler.get_config_status('neural_ode.architecture.time_scale') is not None:
+                output_scale=1.0/config_handler.get_config_status('neural_ode.architecture.time_scale')
+            else:
+                # if time scale is not provided, it is automatically inferred from the data
+                output_scale=1.0/constants['end_time_scale']
         else:
             output_scale=1.0
 
@@ -47,7 +52,7 @@ def create_network_instance(network_sizes:list,config_handler:ConfigReader,loggi
             logging_manager.log(f"Activation function not specified in config file. Using default: relu")
             activation_name='relu'
             activation_function=jax.nn.relu
-        
+        print("Output scale: ",output_scale)
         return VMapMLP(in_size=input_size,out_size=output_size,width_size=hidden_size,depth=num_layers,key=key,activation_function=activation_function,activation_name=activation_name,output_scale=output_scale)
 
     else:
