@@ -96,8 +96,8 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     of the learned latent representation.
     
     Args:
+        networks (dict): Dictionary containing encoder and decoder network model objects
         constants (dict): Dictionary containing training constants including stiffness reduction weight
-        networks (dict): Dictionary containing encoder and decoder network weights
         data_dict (dict): Dictionary containing input data and masks
         stiffness_reduction (bool): Whether to include stiffness reduction regularization
         
@@ -392,7 +392,7 @@ class Encoder_Decoder():
         
         return opt_state
 
-    def loss_fn(self,networks:dict[str,eqx.Module],constants:dict[str,Any],data_dict:dict[str,jax.Array]):
+    def loss_fn(self,networks:dict[str,eqx.Module],constants:dict[str,Any],data_dict:dict[str,jax.Array])-> jax.Array:
         """
         Compute the loss function for the autoencoder.
         
@@ -411,7 +411,7 @@ class Encoder_Decoder():
         return _loss_fn_autoencoder(networks,constants,data_dict,self.stiffness_reduction)
 
     # plot predictions for a single trajectory
-    def test_error_compute(self,enc_object:eqx.Module,dec_object:eqx.Module,save_results:bool=False)->float:
+    def test_error_compute(self,enc_object:eqx.Module,dec_object:eqx.Module,save_results:bool=False)->tuple[float,float]:
         """
         Compute test error and optionally save results.
         

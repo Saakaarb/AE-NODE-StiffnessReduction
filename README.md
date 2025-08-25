@@ -239,7 +239,7 @@ r_2 = A_2 \, e^{-E_{a2}/(RT)} \,[\mathrm{H_2}] \,[\mathrm{O_2}]
 
 ---
 
-- \( \mathrm{N_2} \) is treated as inert.  
+- $\mathrm{N_2}$ is treated as inert.  
 
 This system is much stiffer; this can be seen by the solution time scale:
 

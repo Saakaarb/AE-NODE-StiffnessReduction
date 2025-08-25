@@ -22,7 +22,7 @@ from typing import Any
 ##########################################################
 
 @eqx.filter_jit
-def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
+def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]])->jax.Array:
     """
     Compute the right-hand side of the Neural ODE system.
     
@@ -55,16 +55,14 @@ def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]]):
     # scaling trick derived from 
     #Stiff Neural Ordinary Differential Equations, Kim, Ji et al
     #https://arxiv.org/pdf/2103.15341
-    #jax.debug.print("state shape in ode_fn: {x}",x=jnp.divide(state,scaling).shape)
-    #derivatives=jnp.squeeze(_forward_pass(jnp.divide(state,scaling),trainable_variables_NODE['NODE']))*(1.0/constants['end_time']) # scaling included
+    
     derivatives=trainable_model_NODE(jnp.divide(state,scaling))#*(1.0/constants['end_time']) # scaling included
-    #jax.debug.print("derivatives: {x}",x=derivatives)
-    #jax.debug.print("derivatives shape in ode_fn: {x}",x=derivatives.shape)
+    
     return derivatives
 
 #@partial(jax.jit,static_argnums=(5,))
 @eqx.filter_jit
-def _integrate_NODE(constants: dict[str,Any],trainable_model_NODE: dict[str,VMapMLP],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],i_traj:int,max_traj_size:int):
+def _integrate_NODE(constants: dict[str,Any],trainable_model_NODE: dict[str,VMapMLP],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],i_traj:int,max_traj_size:int)->diffrax.Solution:
     """
     Integrate the Neural ODE system for a single trajectory.
     
@@ -129,7 +127,7 @@ def _integrate_NODE(constants: dict[str,Any],trainable_model_NODE: dict[str,VMap
 
 #@partial(jax.jit,static_argnums=(4,5,))
 @eqx.filter_jit
-def _loss_fn_NODE(trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
+def _loss_fn_NODE(trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int)-> jax.Array:
     """
     Compute the loss function for Neural ODE training.
     
@@ -160,7 +158,7 @@ def _loss_fn_NODE(trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any]
     
     
     # Create a vectorized version of the single-trajectory loss computation
-    def single_trajectory_loss(i_traj:int):
+    def single_trajectory_loss(i_traj:int)->tuple[jax.Array,jax.Array,jax.Array]:
 
         # retain 3D shapes for each: [1,Nts,n_features or latent_dim]
         recon_mask_curr=jnp.expand_dims(recon_mask[i_traj,:,:],axis=0)
@@ -523,7 +521,7 @@ class Neural_ODE():
         return opt_state,success
 
 
-    def loss_fn(self,trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int):
+    def loss_fn(self,trainable_model_NODE:dict[str,VMapMLP],constants:dict[str,Any],enc_dec_models:dict[str,VMapMLP],data_dict:dict[str,jax.Array],num_traj:int,max_traj_size:int)-> jax.Array:
         """
         Compute the loss function for Neural ODE training.
         
@@ -532,12 +530,12 @@ class Neural_ODE():
         to a Python int for compatibility.
         
         Args:
+            trainable_model_NODE (dict[str, eqx.Module]): Neural ODE network model object. A derived class of eqx.Module
             constants (dict[str, Any]): Training constants and parameters
-            trainable_variables_NODE (dict[str, jax.Array]): Neural ODE network weights
-            enc_dec_weights (dict[str, jax.Array]): Encoder and decoder network weights
+            enc_dec_models (dict[str, eqx.Module]): Encoder and decoder network model objects. A derived class of eqx.Module
             data_dict (dict[str, jax.Array]): Training data including masks and input data
             num_traj (int): Number of trajectories to process
-            max_traj_size(int): Maximum trajectory size for integration
+            max_traj_size (int): Maximum trajectory size for integration
             
         Returns:
             jax.Array: Computed loss value
@@ -555,8 +553,8 @@ class Neural_ODE():
         for all test data and comparing predictions with ground truth. It handles
         integration failures gracefully and saves predictions for later analysis.
         
-        Args:
-            None
+        The method uses the best trained model weights and processes all test
+        trajectories, saving both predictions and true values for visualization.
         """
 
         #node_model={'NODE':self.}

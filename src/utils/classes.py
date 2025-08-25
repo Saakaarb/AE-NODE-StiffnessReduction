@@ -10,8 +10,19 @@ from typing import Optional, Dict, Any,Callable
 import json
 from pathlib import Path
 
-def get_activation_function(activation_function:str):
-
+def get_activation_function(activation_function: str):
+    """
+    Get the JAX activation function corresponding to the given name.
+    
+    Args:
+        activation_function (str): Name of the activation function ('relu', 'gelu', or 'tanh')
+        
+    Returns:
+        Callable: JAX activation function
+        
+    Raises:
+        ValueError: If the activation function name is not supported
+    """
     if activation_function=='relu':
         return jax.nn.relu
     elif activation_function=='gelu':
@@ -23,17 +34,54 @@ def get_activation_function(activation_function:str):
 
 
 class ConfigReader():
-    def __init__(self,config_filename:str)->None:
-        self.config_filename=config_filename
-        self.config_status={}
+    """
+    Configuration reader class for parsing and accessing YAML configuration files.
+    
+    This class provides methods to read, access, and modify configuration parameters
+    stored in YAML format. It supports nested configuration access using dot notation.
+    """
+    
+    def __init__(self, config_filename: str) -> None:
+        """
+        Initialize the ConfigReader with a configuration file.
+        
+        Args:
+            config_filename (str): Path to the YAML configuration file
+            
+        Returns:
+            None: Initializes the ConfigReader object
+        """
+        self.config_filename = config_filename
+        self.config_status = {}
 
         self.read_config()
 
-    def read_config(self)->dict:
+    def read_config(self) -> dict:
+        """
+        Read and parse the YAML configuration file.
+        
+        Loads the configuration file and stores the parsed contents in
+        self.config_status for later access.
+        
+        Returns:
+            dict: The parsed configuration dictionary
+        """
         with open(self.config_filename,'r') as f:
             self.config_status=yaml.safe_load(f)
 
-    def get_config_status(self,key:str)->str:
+    def get_config_status(self, key: str) -> str:
+        """
+        Get a configuration value using dot notation for nested keys.
+        
+        Args:
+            key (str): Configuration key using dot notation (e.g., "encoder_decoder.architecture.network_width")
+            
+        Returns:
+            str: The configuration value
+            
+        Raises:
+            ValueError: If the key is not found in the configuration
+        """
         curr_layer = self.config_status
         nested_keys = key.split(".")
         for i in range(len(nested_keys) - 1):
@@ -44,7 +92,17 @@ class ConfigReader():
 
         return curr_layer[nested_keys[-1]]
 
-    def set_config_status(self,key:str,value:str)->None:
+    def set_config_status(self, key: str, value: str) -> None:
+        """
+        Set a configuration value using dot notation for nested keys.
+        
+        Args:
+            key (str): Configuration key using dot notation (e.g., "encoder_decoder.architecture.network_width")
+            value (str): Value to set for the configuration key
+            
+        Returns:
+            None: Modifies the configuration in-place
+        """
         curr_layer = self.config_status
         nested_keys = key.split(".")
         for i in range(len(nested_keys) - 1):
@@ -112,13 +170,16 @@ class VMapMLP(eqx.Module):
     def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh, activation_name:str='tanh', output_scale:float=1.0):
         """
         Initialize the VMapMLP wrapper.
-        batch_axis: axis to apply vmap on
+        
         Args:
-            in_size: Size of input features
-            width_size: Size of hidden layers
-            out_size: Size of output features
-            depth: Number of hidden layers
-            key: JAX random key for weight initialization
+            in_size (int): Size of input features
+            width_size (int): Size of hidden layers
+            out_size (int): Size of output features
+            depth (int): Number of hidden layers
+            key (jax.random.PRNGKey): JAX random key for weight initialization
+            activation_function (Callable, optional): Activation function to use. Defaults to jax.nn.tanh.
+            activation_name (str, optional): Name of the activation function. Defaults to 'tanh'.
+            output_scale (float, optional): Scaling factor for the output. Defaults to 1.0.
         """
         self.output_scale=output_scale
         #print("Output scale in VMapMLP: ",self.output_scale)
@@ -212,53 +273,111 @@ class LoggingManager:
         log_func(message)
 
 class ModelSaver():
+    """
+    Model saving and loading utility class.
+    
+    This class provides functionality to save and load Equinox models along with
+    their hyperparameters. It supports both model serialization and reconstruction.
+    """
 
-    def __init__(self, config_handler:ConfigReader,logging_manager:LoggingManager):
+    def __init__(self, config_handler: ConfigReader, logging_manager: LoggingManager):
+        """
+        Initialize the ModelSaver.
+        
+        Args:
+            config_handler (ConfigReader): Configuration handler for model parameters
+            logging_manager (LoggingManager): Manager for logging operations
+        """
+        self.config_handler = config_handler
+        self.logging_manager = logging_manager
 
-        self.config_handler=config_handler
-        self.logging_manager=logging_manager
-
-    def save_model(self,model:eqx.Module,filename:str|Path):
-
-        self.model=model
+    def save_model(self, model: eqx.Module, filename: str | Path):
+        """
+        Save a model along with its hyperparameters.
+        
+        Extracts hyperparameters from the model and saves both the model weights
+        and hyperparameters to the specified file.
+        
+        Args:
+            model (eqx.Module): The Equinox model to save
+            filename (str | Path): Path where the model should be saved
+        """
+        self.model = model
         # extract hyperparams
-        hyperparams={}
-        hyperparams["output_scale"]=float(self.model.output_scale)
-        hyperparams["in_size"]=int(self.model.in_size)
-        hyperparams["out_size"]=int(self.model.out_size)
-        hyperparams["width_size"]=int(self.model.width_size)
-        hyperparams["depth"]=int(self.model.depth)
-        hyperparams["activation_name"]=str(self.model.activation_name)
-        hyperparams["model_name"]=str(self.model.model_name)
+        hyperparams = {}
+        hyperparams["output_scale"] = float(self.model.output_scale)
+        hyperparams["in_size"] = int(self.model.in_size)
+        hyperparams["out_size"] = int(self.model.out_size)
+        hyperparams["width_size"] = int(self.model.width_size)
+        hyperparams["depth"] = int(self.model.depth)
+        hyperparams["activation_name"] = str(self.model.activation_name)
+        hyperparams["model_name"] = str(self.model.model_name)
         # write model
         #filename=Path(self.config_handler.get_config_status("model.loading.model_output_dir"))/Path(self.config_handler.get_config_status("model.loading.load_path_encoder"))
         self.write_model(filename, hyperparams, self.model)
 
-    def write_model(self, filename:str|Path, hyperparams:dict, model:eqx.Module):
+    def write_model(self, filename: str | Path, hyperparams: dict, model: eqx.Module):
+        """
+        Write model and hyperparameters to a file.
+        
+        Saves the hyperparameters as JSON on the first line, followed by the
+        serialized model weights using Equinox's serialization.
+        
+        Args:
+            filename (str | Path): Path where the model should be saved
+            hyperparams (dict): Dictionary containing model hyperparameters
+            model (eqx.Module): The Equinox model to serialize
+        """
         with open(filename, "wb") as f:
             hyperparam_str = json.dumps(hyperparams)
             f.write((hyperparam_str + "\n").encode())
             eqx.tree_serialise_leaves(f, model)
 
-    # will always return a derived class of eqx.Module
-    def make_model(self, hyperparams:dict)->eqx.Module:
+    def make_model(self, hyperparams: dict) -> eqx.Module:
+        """
+        Create a model instance from hyperparameters.
         
-        in_size=hyperparams["in_size"]
-        out_size=hyperparams["out_size"]
-        width_size=hyperparams["width_size"]
-        depth=hyperparams["depth"]
-        activation_name=hyperparams["activation_name"]
-        output_scale=hyperparams["output_scale"]
-        activation_function=get_activation_function(activation_name)
-        model_name=hyperparams["model_name"]
+        Reconstructs a model with the specified architecture and parameters.
+        Currently supports MLP models only.
+        
+        Args:
+            hyperparams (dict): Dictionary containing model hyperparameters including
+                              in_size, out_size, width_size, depth, activation_name,
+                              output_scale, and model_name
+                              
+        Returns:
+            eqx.Module: A new model instance with the specified parameters
+            
+        Raises:
+            ValueError: If the model name is not supported
+        """
+        in_size = hyperparams["in_size"]
+        out_size = hyperparams["out_size"]
+        width_size = hyperparams["width_size"]
+        depth = hyperparams["depth"]
+        activation_name = hyperparams["activation_name"]
+        output_scale = hyperparams["output_scale"]
+        activation_function = get_activation_function(activation_name)
+        model_name = hyperparams["model_name"]
 
-        if model_name=="mlp":
-            return VMapMLP(in_size=in_size,out_size=out_size,width_size=width_size,depth=depth,key=jax.random.PRNGKey(0),activation_function=activation_function,activation_name=activation_name,output_scale=output_scale)
+        if model_name == "mlp":
+            return VMapMLP(in_size=in_size, out_size=out_size, width_size=width_size, depth=depth, key=jax.random.PRNGKey(0), activation_function=activation_function, activation_name=activation_name, output_scale=output_scale)
         else:
             raise ValueError(f"Model name {model_name} not supported")
    
-    def load_model(self, filename:str|Path)->eqx.Module:
-
+    def load_model(self, filename: str | Path) -> eqx.Module:
+        """
+        Load a model from a saved file.
+        
+        Reads the hyperparameters from the first line of the file and reconstructs
+        the model, then loads the saved weights.
+        
+        Args:
+            filename (str | Path): Path to the saved model file
+            
+        Returns:
+            eqx.Module: The loaded model with restored weights
+        """
         with open(filename, "rb") as f:
             hyperparams = json.loads(f.readline().decode())
             model = self.make_model(hyperparams)

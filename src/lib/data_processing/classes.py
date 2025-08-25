@@ -737,12 +737,22 @@ class Data_Processing():
         self.logging_manager.log(f"Data saved to {data_dir}/")
 
 
-    def sample_training_data(self,)->dict[str,np.ndarray]:
+    def sample_training_data(self) -> dict[str, np.ndarray]:
         """
-        Divide data into batches.
+        Randomly sample a subset of training data for batch training.
+        
+        Returns a randomly selected batch of training data from the pre-generated
+        data samples, including input data, time data, masks, and other necessary
+        arrays for training.
         
         Args:
+            None: Uses pre-generated data samples
             
+        Returns:
+            dict[str, np.ndarray]: Dictionary containing a batch of training data
+                                  with keys: input_data, time_data, start_end_time_data,
+                                  initial_condition_data, recon_mask, latent_space_mask,
+                                  cond_1_mask, cond_2_mask, all_time_data_broadcasted
         """
         return random.choice(self.data_samples_train)
 
@@ -813,8 +823,19 @@ class Data_Processing():
 
         self.logging_manager.log(f"Data loaded from {data_dir}/")
     
-    def _place_on_device(self,data:np.ndarray)-> jax.Array:
-        """Place numpy array on GPU device and convert to JAX array"""
+    def _place_on_device(self, data: np.ndarray) -> jax.Array:
+        """
+        Place numpy array on GPU device and convert to JAX array.
+        
+        This helper method transfers numpy arrays to the configured JAX device
+        (typically GPU) and converts them to JAX arrays for efficient computation.
+        
+        Args:
+            data (np.ndarray): Numpy array to transfer to device
+            
+        Returns:
+            jax.Array: JAX array placed on the configured device
+        """
         if isinstance(data, np.ndarray):
             return jax.device_put(data, self.device)
         return data 

@@ -7,24 +7,27 @@ import mlflow
 import equinox
 from src.utils.classes import ConfigReader, VMapMLP,LoggingManager,get_activation_function
 
-# for the system created by the script 2_eq_system.py
 
-# @jax.jit
-# def _forward_pass(network_input,network):
-
-#     interm_comp=network_input
-#     for i_layer in range(len(network[0])):
+def create_network_instance(network_sizes: list, config_handler: ConfigReader, logging_manager: LoggingManager, model_string: str, constants: dict) -> equinox.Module:
+    """
+    Create a neural network instance based on configuration and model type.
+    
+    This function creates a VMapMLP network with the specified architecture. For neural ODE models,
+    it automatically determines the output scaling factor based on time scale configuration.
+    
+    Args:
+        network_sizes (list): List containing [input_size, hidden_size, output_size]
+        config_handler (ConfigReader): Configuration handler for model parameters
+        logging_manager (LoggingManager): Manager for logging operations
+        model_string (str): Model type identifier (e.g., 'neural_ode', 'encoder_decoder')
+        constants (dict): Dictionary containing training constants including 'end_time_scale'
         
-#         if i_layer!=len(network[0])-1:
-#             interm_comp=jax.nn.tanh(interm_comp@network[0][i_layer]+network[1][i_layer])
-#         else:
-#             interm_comp=interm_comp@network[0][i_layer]+network[1][i_layer]
-
-#     return interm_comp
-
-
-def create_network_instance(network_sizes:list,config_handler:ConfigReader,logging_manager:LoggingManager,model_string:str,constants:dict)->equinox.Module:
-
+    Returns:
+        equinox.Module: A VMapMLP network instance with the specified architecture
+        
+    Raises:
+        ValueError: If the network type is not supported
+    """
     if config_handler.get_config_status(f'{model_string}.architecture.network_type')=='mlp':
 
         # the neural ODE needs output to be scaled by end time
@@ -59,7 +62,23 @@ def create_network_instance(network_sizes:list,config_handler:ConfigReader,loggi
         raise ValueError(f"Network type {config_handler.get_config_status(f'{model_string}.architecture.network_type')} not supported")
 
 def standard_score_norm(feature_data):
-
+    """
+    Compute standard score normalization parameters for input and output features.
+    
+    Calculates mean and standard deviation for each feature across all samples.
+    Since the mapping space is the same for inputs and outputs, the normalization
+    parameters are identical for both.
+    
+    Args:
+        feature_data (np.ndarray): Feature data of shape [n_features, n_samples]
+        
+    Returns:
+        tuple: (mean_vals_inp, std_vals_inp, mean_vals_out, std_vals_out) where:
+            - mean_vals_inp (np.ndarray): Mean values for input features
+            - std_vals_inp (np.ndarray): Standard deviation values for input features
+            - mean_vals_out (np.ndarray): Mean values for output features (same as input)
+            - std_vals_out (np.ndarray): Standard deviation values for output features (same as input)
+    """
     # use true ODE function to get normalizations for both inputs and outputs
     
     #inputs:
@@ -80,8 +99,22 @@ def standard_score_norm(feature_data):
 
     return mean_vals_inp,std_vals_inp,mean_vals_out,std_vals_out
 
-def process_raw_data(data,config_handler):
-
+def process_raw_data(data, config_handler):
+    """
+    Process raw data based on the specified arrangement mode.
+    
+    Routes data processing to the appropriate extraction function based on
+    whether the data is arranged in row-major or column-major format.
+    
+    Args:
+        data: Raw data to be processed
+        config_handler (ConfigReader): Configuration handler containing data arrangement settings
+        
+    Returns:
+        tuple: (time_data, feature_data) where:
+            - time_data: Extracted time data
+            - feature_data: Extracted feature data
+    """
     if config_handler.get_config_status('data_processing.data_arrange_mode')=='row_major':
 
         time_data,feature_data=extract_row_major_data(data,config_handler)
@@ -92,8 +125,25 @@ def process_raw_data(data,config_handler):
     return time_data,feature_data
 
 
-def extract_row_major_data(data,config_handler):
-
+def extract_row_major_data(data, config_handler):
+    """
+    Extract time and feature data from row-major formatted data.
+    
+    In row-major format, each row represents a feature and each column represents a time step.
+    The first row (index 0) is assumed to be the time data.
+    
+    Args:
+        data: Data array in row-major format where shape is [n_features+1, n_time_steps]
+        config_handler (ConfigReader): Configuration handler containing feature extraction settings
+        
+    Returns:
+        tuple: (time_data, feature_data) where:
+            - time_data: Time data from the first row
+            - feature_data: Feature data from the specified feature rows
+            
+    Raises:
+        ValueError: If data dimensions don't match expected feature count or if invalid feature indices are specified
+    """
     # get indices to extract (user specified)
 
     # assert that user provided total  matches number of rows in data
@@ -124,8 +174,25 @@ def extract_row_major_data(data,config_handler):
     
     return time_data,feature_data
 
-def extract_column_major_data(data,config_handler):
-
+def extract_column_major_data(data, config_handler):
+    """
+    Extract time and feature data from column-major formatted data.
+    
+    In column-major format, each column represents a feature and each row represents a time step.
+    The first column (index 0) is assumed to be the time data.
+    
+    Args:
+        data: Data array in column-major format where shape is [n_time_steps, n_features+1]
+        config_handler (ConfigReader): Configuration handler containing feature extraction settings
+        
+    Returns:
+        tuple: (time_data, feature_data) where:
+            - time_data: Time data from the first column
+            - feature_data: Feature data from the specified feature columns (transposed for consistency)
+            
+    Raises:
+        ValueError: If data dimensions don't match expected feature count or if invalid feature indices are specified
+    """
     # get indices to extract (user specified)
 
     # assert that user provided total  matches number of rows in data
@@ -177,11 +244,30 @@ def divide_range_random(start, end, group_size, seed=None):
     random.shuffle(numbers)
     return [numbers[i:i+group_size] for i in range(0, len(numbers), group_size)]
 
-def log_to_mlflow(config_status,config_filename):
-        """Log all configuration parameters to MLflow"""
+def log_to_mlflow(config_status, config_filename):
+        """
+        Log all configuration parameters to MLflow.
+        
+        Flattens nested configuration dictionaries and logs each parameter individually,
+        then logs the configuration file as an artifact.
+        
+        Args:
+            config_status (dict): Configuration dictionary to log
+            config_filename (str): Path to the configuration file to log as artifact
+        """
         
         def flatten_dict(d, parent_key='', sep='.'):
-            """Flatten nested dictionary with dot notation"""
+            """
+            Flatten nested dictionary with dot notation.
+            
+            Args:
+                d (dict): Dictionary to flatten
+                parent_key (str): Parent key for nested dictionaries
+                sep (str): Separator for dot notation
+                
+            Returns:
+                dict: Flattened dictionary with dot notation keys
+            """
             items = []
             for k, v in d.items():
                 new_key = f"{parent_key}{sep}{k}" if parent_key else k
@@ -198,9 +284,28 @@ def log_to_mlflow(config_status,config_filename):
         
         # Log the config file as an artifact
         mlflow.log_artifact(config_filename, "config")
-def log_to_mlflow_metrics(metrics_dict,step):
+def log_to_mlflow_metrics(metrics_dict, step):
+    """
+    Log metrics to MLflow with step information.
+    
+    Iterates through a dictionary of metrics and logs each one to MLflow
+    with the specified step number.
+    
+    Args:
+        metrics_dict (dict): Dictionary containing metric names and values
+        step (int): Step number for the metrics
+    """
     for key, value in metrics_dict.items():
         mlflow.log_metric(key, value, step=step)
 
-def log_to_mlflow_artifacts(artifact_path,artifact_name):
-    mlflow.log_artifact(artifact_path,artifact_name)
+def log_to_mlflow_artifacts(artifact_path, artifact_name):
+    """
+    Log artifacts to MLflow.
+    
+    Logs a file or directory as an artifact in MLflow with the specified name.
+    
+    Args:
+        artifact_path (str): Path to the file or directory to log
+        artifact_name (str): Name to assign to the artifact in MLflow
+    """
+    mlflow.log_artifact(artifact_path, artifact_name)
