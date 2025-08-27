@@ -336,6 +336,6 @@ AE-NODE-StiffnessReduction/
 
 # Upcoming Improvements
 
-- Further GPU optimization
+- Data splitting for GPU
 - Tests
-- Scaling of latent space inputs
+- Pushforward method to improve training efficiency
