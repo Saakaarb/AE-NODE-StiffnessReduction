@@ -339,3 +339,4 @@ AE-NODE-StiffnessReduction/
 - Data splitting for GPU
 - Tests
 - Pushforward method to improve training efficiency
+- BatchNorm

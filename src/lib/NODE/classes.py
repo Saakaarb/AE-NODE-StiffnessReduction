@@ -49,7 +49,7 @@ def _ode_fn(t:float,state:jax.Array,other_args:dict[str,dict[str,Any]])->jax.Arr
 
     #TODO change scaling for input and output
     # hardcoded for now
-    scaling=jnp.array([1.0,1.0])
+    scaling=jnp.array([1.0,1.0,1.0])
 
 
     # scaling trick derived from 
