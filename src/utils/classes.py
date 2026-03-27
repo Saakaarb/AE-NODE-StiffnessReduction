@@ -164,9 +164,7 @@ class VMapMLP(eqx.Module):
     depth: int
     activation_name: str
     model_name: str
-    #key: jax.random.PRNGKey
-    #activation_function: Callable
-    
+
     def __init__(self, in_size: int, width_size: int, out_size: int, depth: int, key: jax.random.PRNGKey,activation_function:Callable= jax.nn.tanh, activation_name:str='tanh', output_scale:float=1.0):
         """
         Initialize the VMapMLP wrapper.
@@ -182,16 +180,13 @@ class VMapMLP(eqx.Module):
             output_scale (float, optional): Scaling factor for the output. Defaults to 1.0.
         """
         self.output_scale=output_scale
-        #print("Output scale in VMapMLP: ",self.output_scale)
         self.in_size=in_size
         self.out_size=out_size
         self.width_size=width_size
         self.depth=depth
         self.activation_name=activation_name
         self.model_name="mlp"
-        #self.key=key
-        #self.activation_function=activation_function
-        
+
         self.mlp = eqx.nn.MLP(
             in_size=in_size,
             width_size=width_size,
@@ -212,7 +207,6 @@ class VMapMLP(eqx.Module):
             Output tensor with same batch and time dimensions
         """
         
-        #jax.debug.print("output scale in call: {x}",x=self.output_scale)
         f_time  = jax.vmap(self.mlp, in_axes=0, out_axes=0)
         f_batch = jax.vmap(f_time, in_axes=0, out_axes=0)
 
@@ -312,8 +306,6 @@ class ModelSaver():
         hyperparams["depth"] = int(self.model.depth)
         hyperparams["activation_name"] = str(self.model.activation_name)
         hyperparams["model_name"] = str(self.model.model_name)
-        # write model
-        #filename=Path(self.config_handler.get_config_status("model.loading.model_output_dir"))/Path(self.config_handler.get_config_status("model.loading.load_path_encoder"))
         self.write_model(filename, hyperparams, self.model)
 
     def write_model(self, filename: str | Path, hyperparams: dict, model: eqx.Module):

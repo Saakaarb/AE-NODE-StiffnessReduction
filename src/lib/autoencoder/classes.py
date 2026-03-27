@@ -11,10 +11,8 @@ from pathlib import Path
 import time
 import shutil
 import matplotlib.pyplot as plt
-from functools import partial
 from typing import Any
 import equinox as eqx
-from typing import Any
 from copy import deepcopy
 
 # jit functions need to sit outside of classes
@@ -69,25 +67,19 @@ def _compute_condition_number_norm(data_dict:dict[str,jax.Array],latent_space_pr
     dt = jnp.diff(time_data, axis=1)  # Shape: [batch, time-1, features]
     
     dlatent = jnp.diff(latent_space_preds, axis=1)  # Shape: [batch, time-1, features]
-    #jax.debug.print("dlatent :{x}",x=dlatent)
     # Compute derivatives
     cond_1 = jnp.divide(dlatent[:,1:,:], dt[:,1:,:] + eps_dt) * cond_1_mask
     cond_2 = jnp.divide(dlatent[:,:-1,:], dt[:,:-1,:] + eps_dt) * cond_2_mask
     
     cond_numer= jnp.sqrt(jnp.mean(jnp.square(cond_1-cond_2)+eps,axis=1))
-    
-    #cond_3 = jnp.sqrt(jnp.mean(jnp.square(dlatent[:,1:,:] - dlatent[:,:-1,:]), axis=1))
-    #cond_3 = jnp.abs(jnp.mean(jnp.abs(latent_space_preds[:,2:,:] - latent_space_preds[:,:-2,:])+eps, axis=1))
+
     cond_3 = jnp.sqrt(jnp.mean(jnp.square(latent_space_preds[:,2:,:] - latent_space_preds[:,:-2,:])+eps, axis=1))
     cond_loss=jnp.mean(cond_numer/(cond_3))
     
     return cond_loss
 
-#@partial(jax.jit,static_argnums=(3,))
-#def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_reduction:bool):
 @eqx.filter_jit
 def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_reduction:bool):
-    #networks=eqx.combine(params,static)
     """
     Compute the total loss for the autoencoder training.
     
@@ -112,16 +104,10 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     input_data=data_dict['input_data']
     
     # forward pass data through encoder
-    #latent_space_preds=_forward_pass(input_data,networks['encoder'])
     latent_space_preds=networks['encoder'](input_data)
 
     # forward pass latent rep through decoder
-    #predicted_specie=_forward_pass(latent_space_preds,networks['decoder'])
     predicted_specie=networks['decoder'](latent_space_preds)
-
-    #jax.debug.print("input_data_shape :{x}",x=input_data.shape)
-    #jax.debug.print("latent_space_preds_shape :{x}",x=latent_space_preds.shape)
-    #jax.debug.print("predicted_specie_shape :{x}",x=predicted_specie.shape)
 
     # construct reconstruction
     recon_loss = _compute_recon_loss(input_data,predicted_specie,data_dict)
@@ -132,7 +118,6 @@ def _loss_fn_autoencoder(networks:dict,constants:dict,data_dict:dict,stiffness_r
     # and introduces a multi-objective optimization term
 
     if stiffness_reduction:
-        #jax.debug.print("stiffness reduction")
         cond_loss=_compute_condition_number_norm(data_dict,latent_space_preds)
         
     else:
@@ -325,8 +310,14 @@ class Encoder_Decoder():
                 t1=time.time()
 
         self.logging_manager.log("Training complete")
-        
         self.logging_manager.log(f"Best test loss: {self.best_test_loss}")
+
+        # save loss curves to disk
+        save_dir = Path(self.config_handler.get_config_status("encoder_decoder.testing.save_dir"))
+        np.save(save_dir / "training_loss.npy", np.array(self.training_loss_values))
+        np.save(save_dir / "test_loss.npy", np.array(self.test_loss_values))
+        np.save(save_dir / "test_cond_loss.npy", np.array(self.test_cond_loss_values))
+        self.logging_manager.log(f"Loss curves saved to {save_dir}/")
 
 
     def _train_step(self,opt_state:optax.OptState,train_step:int):
@@ -503,6 +494,9 @@ class Encoder_Decoder():
         model_saver_decoder=ModelSaver(self.config_handler,self.logging_manager)
         model_saver_encoder.save_model(self.best_trainable_models['encoder'],encoder_save_path)
         model_saver_decoder.save_model(self.best_trainable_models['decoder'],decoder_save_path)
+
+        # After the model is saved successfully
+        log_to_mlflow_artifacts("encoder_decoder_weights", "encoder_decoder_models")
 
     def _load_enc_dec(self):
         """

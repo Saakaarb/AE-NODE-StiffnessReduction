@@ -90,10 +90,7 @@ def standard_score_norm(feature_data):
         mean_vals_inp[i]=np.mean(feature_data[i,:])
         std_vals_inp[i]=np.std(feature_data[i,:])
 
-    #outputs
-    # these are same as inp since the mapping space is the same
-    #mean_vals_out=np.zeros(feature_data.shape[0])
-    #std_vals_out=np.zeros(feature_data.shape[0])
+    #outputs: same as inputs since the mapping space is the same
     mean_vals_out=mean_vals_inp
     std_vals_out=std_vals_inp
 

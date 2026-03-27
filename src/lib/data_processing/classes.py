@@ -163,9 +163,6 @@ class Data_Processing():
             # outputs: time_data(Nts,),feature_data(Nfeat,Nts)
             time_data,feature_data=process_raw_data(data,self.config_handler)
 
-            if self.config_handler.get_config_status("data_processing.check_raw_data_shape"):
-                pass
-
             # record time steps present for each trajectory
             # used to construct masks later
             self.num_timesteps_each_traj_train[i_traj]=time_data.shape[0]

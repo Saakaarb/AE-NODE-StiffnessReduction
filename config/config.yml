@@ -41,7 +41,7 @@ encoder_decoder:
         learning_rate_decay_steps: 2000
 
         # batch processing
-        num_training_iters: 50000 # for l-bfgs use max 200 steps, for adam use 30000
+        num_training_iters: 20000 # for l-bfgs use max 200 steps, for adam use 30000
         
         print_freq: 100 # for l-bfgs use 1 steps, for adam use 100
 
@@ -65,15 +65,15 @@ encoder_decoder:
 neural_ode:
     saving:
         save_model: True # True/False
-        load_model: False # True/False
+        load_model: True # True/False
         model_output_dir: 'NODE_weights'
         load_path: 'NODE_model.eqx' 
 
     architecture:
         network_type: 'mlp'
         activation_function: 'tanh' # 'relu' or 'tanh'
-        network_width: 64
-        num_layers: 2
+        network_width: 128
+        num_layers: 3
 
     training:
        
