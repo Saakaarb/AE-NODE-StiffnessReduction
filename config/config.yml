@@ -35,7 +35,7 @@ encoder_decoder:
 
         # Optimizer and learning rate
         optimizer: 'adam' # 'adam' or 'l-bfgs'
-        start_learning_rate: 0.001 
+        start_learning_rate: 0.0005 
         end_learning_rate: 0.00001
         learning_rate_decay: 0.9
         learning_rate_decay_steps: 2000
@@ -64,7 +64,7 @@ encoder_decoder:
 
 neural_ode:
     saving:
-        save_model: True # True/False
+        save_model: False # True/False
         load_model: True # True/False
         model_output_dir: 'NODE_weights'
         load_path: 'NODE_model.eqx' 
