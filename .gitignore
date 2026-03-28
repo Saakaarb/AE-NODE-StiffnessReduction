@@ -11,12 +11,20 @@ archive/
 *.pickle
 
 # Data directories
+raw_data/
 script_data/
 enc_dec_results/
 NODE_results/
 NODE_weights/
+encoder_decoder_weights/
 mlruns/
 processed_data/
+tutorial/tutorial_data/
+data_generators/**/*.txt
+data_generators/**/*.csv
+logged_runs/
+experiments/
+run_output.txt
 
 # Python
 __pycache__/
