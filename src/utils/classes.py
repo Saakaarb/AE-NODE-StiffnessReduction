@@ -306,6 +306,9 @@ class ModelSaver():
         hyperparams["depth"] = int(self.model.depth)
         hyperparams["activation_name"] = str(self.model.activation_name)
         hyperparams["model_name"] = str(self.model.model_name)
+        # store weight dtype so load_model can reconstruct the skeleton with matching dtype
+        leaves = jax.tree_util.tree_leaves(eqx.filter(self.model, eqx.is_inexact_array))
+        hyperparams["dtype"] = str(leaves[0].dtype) if leaves else "float32"
         self.write_model(filename, hyperparams, self.model)
 
     def write_model(self, filename: str | Path, hyperparams: dict, model: eqx.Module):
@@ -353,7 +356,11 @@ class ModelSaver():
         model_name = hyperparams["model_name"]
 
         if model_name == "mlp":
-            return VMapMLP(in_size=in_size, out_size=out_size, width_size=width_size, depth=depth, key=jax.random.PRNGKey(0), activation_function=activation_function, activation_name=activation_name, output_scale=output_scale)
+            model = VMapMLP(in_size=in_size, out_size=out_size, width_size=width_size, depth=depth, key=jax.random.PRNGKey(0), activation_function=activation_function, activation_name=activation_name, output_scale=output_scale)
+            # cast skeleton to saved dtype so tree_deserialise_leaves succeeds regardless of global x64 state
+            dtype = hyperparams.get("dtype", "float32")
+            model = jax.tree_util.tree_map(lambda x: x.astype(dtype) if eqx.is_inexact_array(x) else x, model)
+            return model
         else:
             raise ValueError(f"Model name {model_name} not supported")
    

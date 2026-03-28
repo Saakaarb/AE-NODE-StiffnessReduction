@@ -1,6 +1,17 @@
+# JAX installation depends on your hardware.
+# CPU only:
+#   pip install jax
+# CUDA 12 (recommended for GPU):
+#   pip install "jax[cuda12]"
+# CUDA 11:
+#   pip install "jax[cuda11_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+#
+# After installing JAX, install the remaining dependencies:
+#   pip install -r requirements.txt
+#
+# jax and jaxlib are intentionally omitted here to avoid overwriting a GPU install.
 diffrax
 equinox
-jax
 matplotlib
 numpy
 optax

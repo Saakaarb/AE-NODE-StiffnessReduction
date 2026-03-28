@@ -104,11 +104,11 @@ def _integrate_NODE(constants: dict[str,Any],trainable_model_NODE: dict[str,VMap
 
     curr_time_data=time_data[i_traj,:]
 
-    saveat = diffrax.SaveAt(t0=True,t1=True,steps=True)
+    saveat = diffrax.SaveAt(ts=curr_time_data)
     stepsize_controller=diffrax.StepTo(ts=curr_time_data)
 
     term = diffrax.ODETerm(_ode_fn)
-    
+
     # solution dimension: [Nts,1,1,latent_dim]
     solution = diffrax.diffeqsolve(term,diffrax.Heun(),t0=t_init,t1=t_final,dt0=None,y0=y_latent_init,
                                     saveat=saveat,args={'constants':constants,'trainable_model_NODE':trainable_model_NODE,'i_traj':i_traj},throw=False,
